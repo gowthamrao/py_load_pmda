@@ -104,62 +104,60 @@ class ApprovalsParser:
 
 class JaderParser:
     """
-    Parses the downloaded JADER zip files.
+    Parses a downloaded JADER zip file.
 
-    The JADER dataset is distributed in quarterly zip files, each containing
-    four CSV files:
-    - CASE.csv: Case information
+    The JADER dataset is distributed in a zip file containing four CSV files:
     - DEMO.csv: Patient demographic information
     - DRUG.csv: Drug information
     - REAC.csv: Reaction (adverse event) information
+    - HIST.csv: Patient history information
     """
-    JADER_FILES = ["CASE", "DEMO", "DRUG", "REAC"]
+    # The four key files expected inside the JADER zip archive.
+    JADER_FILENAMES = ["DEMO", "DRUG", "REAC", "HIST"]
 
-    def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename: str) -> pd.DataFrame:
-        """Reads a specific CSV from a zip file into a DataFrame."""
+    def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename_stem: str) -> pd.DataFrame:
+        """Reads a specific CSV from a zip file into a DataFrame, handling encoding."""
+        # Find the actual filename in the zip, ignoring case. e.g., 'DEMO.csv' or 'demo.csv'
         try:
-            # The filenames inside the zip are uppercase (e.g., 'CASE.csv')
-            with zf.open(f"{filename.upper()}.csv") as csv_file:
-                # Critical: JADER files use Shift-JIS encoding.
-                return pd.read_csv(csv_file, encoding="shift_jis", low_memory=False)
-        except KeyError:
-            print(f"Warning: {filename}.csv not found in zip file.")
-            return pd.DataFrame()
-        except Exception as e:
-            print(f"Error reading {filename}.csv from zip: {e}")
+            target_filename = next(
+                name for name in zf.namelist() if name.lower() == f"{filename_stem.lower()}.csv"
+            )
+        except StopIteration:
+            print(f"Warning: '{filename_stem}.csv' not found in the zip file.")
             return pd.DataFrame()
 
-    def parse(self, file_paths: List[Path]) -> Dict[str, pd.DataFrame]:
+        try:
+            with zf.open(target_filename) as csv_file:
+                # Critical: JADER files use Shift-JIS encoding.
+                return pd.read_csv(csv_file, encoding="shift_jis")
+        except Exception as e:
+            print(f"Error reading '{target_filename}' from zip: {e}")
+            return pd.DataFrame()
+
+    def parse(self, file_path: Path) -> Dict[str, pd.DataFrame]:
         """
-        Parses multiple JADER zip files and concatenates the data.
+        Parses a single JADER zip file.
 
         Args:
-            file_paths: A list of paths to the downloaded .zip files.
+            file_path: The path to the downloaded .zip file.
 
         Returns:
-            A dictionary of DataFrames, with keys 'case', 'demo', 'drug', 'reac'.
+            A dictionary of DataFrames, where keys are the target table names
+            (e.g., 'jader_demo', 'jader_drug').
         """
-        all_data = {key.lower(): [] for key in self.JADER_FILES}
+        parsed_data = {}
+        if not file_path or not file_path.exists():
+            raise FileNotFoundError(f"JADER zip file not found at {file_path}.")
 
-        print(f"Parsing {len(file_paths)} JADER zip files...")
-        for zip_path in file_paths:
-            if not zip_path.exists():
-                print(f"Warning: Zip file not found at {zip_path}. Skipping.")
-                continue
+        print(f"--- JADER Parser ---")
+        print(f"Parsing JADER zip file: {file_path}")
+        with zipfile.ZipFile(file_path) as zf:
+            for file_stem in self.JADER_FILENAMES:
+                df = self._read_csv_from_zip(zf, file_stem)
+                # The key in the returned dictionary must match the table name in the schema.
+                table_name = f"jader_{file_stem.lower()}"
+                parsed_data[table_name] = df
+                if not df.empty:
+                    print(f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows.")
 
-            with zipfile.ZipFile(zip_path) as zf:
-                for file_type in self.JADER_FILES:
-                    df = self._read_csv_from_zip(zf, file_type)
-                    if not df.empty:
-                        all_data[file_type.lower()].append(df)
-
-        # Concatenate all the dataframes for each type
-        concatenated_data = {}
-        for file_type, df_list in all_data.items():
-            if df_list:
-                concatenated_data[file_type] = pd.concat(df_list, ignore_index=True)
-                print(f"Successfully concatenated {len(df_list)} files for '{file_type}', total rows: {len(concatenated_data[file_type])}.")
-            else:
-                concatenated_data[file_type] = pd.DataFrame()
-
-        return concatenated_data
+        return parsed_data

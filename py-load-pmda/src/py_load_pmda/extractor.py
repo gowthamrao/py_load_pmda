@@ -140,45 +140,46 @@ class ApprovalsExtractor(BaseExtractor):
 
 class JaderExtractor(BaseExtractor):
     """
-    Finds the JADER dataset files in the cache.
+    Extracts the JADER (Japanese Adverse Drug Event Report) dataset from the PMDA website.
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.jader_info_url = "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0004.html"
+        # This is the landing page where the link to the JADER zip file is found.
+        self.jader_info_url = "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0005.html"
 
-    def extract(self, last_state: dict) -> Tuple[List[Path], str]:
+    def _find_jader_zip_url(self, soup: BeautifulSoup) -> str:
         """
-        Checks for JADER .zip files in the cache and returns their paths.
+        Finds the download link for the JADER zip file on the page.
+        The link is identified by containing 'jader' and ending in '.zip'.
+        """
+        # A more robust selector might be needed if the site structure changes.
+        link = soup.find("a", href=lambda href: href and "jader" in href.lower() and href.endswith(".zip"))
+        if not link or not link.has_attr("href"):
+            raise ValueError("Could not find the JADER zip file download link on the page.")
+
+        # The URL in the href attribute is relative, so we join it with the base URL.
+        return urljoin(self.base_url, link["href"])
+
+    def extract(self, last_state: dict) -> Tuple[Path, str, dict]:
+        """
+        Main extraction method for the JADER dataset.
+        It automates the download of the JADER zip file and uses ETags for delta detection.
         """
         print("--- JADER Extractor ---")
-        print("NOTE: JADER files must be downloaded manually due to CAPTCHA.")
+        print(f"Step 1: Fetching the JADER info page: {self.jader_info_url}")
+        info_page_soup = self._get_page_content(self.jader_info_url)
 
-        jader_zip_files = list(self.cache_dir.glob("*.zip"))
+        print("Step 2: Finding the JADER zip file download URL...")
+        zip_url = self._find_jader_zip_url(info_page_soup)
+        print(f"Found download URL: {zip_url}")
 
-        if not jader_zip_files:
-            error_message = f"""
-            ========================================================================
-            JADER FILES NOT FOUND!
-            Please download the JADER dataset files manually.
-            1. Go to: {self.jader_info_url}
-            2. Download the .zip files.
-            3. Place all .zip files into the cache directory:
-               {self.cache_dir.resolve()}
-            ========================================================================
-            """
-            raise FileNotFoundError(error_message)
+        print("Step 3: Downloading the JADER zip file...")
+        # The _download_file method handles caching and ETag checking.
+        # It will return the path to the cached file and set self.new_state.
+        file_path = self._download_file(zip_url, last_state=last_state)
 
-        # For JADER, we can use file hashes as a delta-check mechanism
-        hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in jader_zip_files}
-        self.new_state = {"file_hashes": hashes}
-
-        if last_state and last_state.get("file_hashes") == hashes:
-            print("JADER files have not changed since last run. Skipping.")
-            # This is where we could implement a mechanism to stop the pipeline
-            # For now, we'll just log it.
-
-        print(f"Found {len(jader_zip_files)} JADER .zip file(s) in cache.")
-        return jader_zip_files, self.jader_info_url, self.new_state
+        # The CLI expects a 3-tuple return, so we match that signature.
+        return file_path, zip_url, self.new_state
 
 
 class PackageInsertsExtractor(BaseExtractor):
