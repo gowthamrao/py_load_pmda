@@ -132,64 +132,56 @@ def run(
         # C. Transform
         print(f"--- Running Transformer: {ds_config['transformer']} ---")
         transformer_instance = transformer_class(source_url=source_url)
-        transformed_df = transformer_instance.transform(raw_df)
+        transformed_output = transformer_instance.transform(raw_df)
 
         # 7. Load
         load_mode = mode or ds_config.get("load_mode", "overwrite")
         schema_name = ds_config["schema_name"]
-        table_name = ds_config["table_name"]
-        print(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
 
-        if transformed_df.empty:
-            print("Transformed DataFrame is empty. Nothing to load.")
-        elif load_mode == "merge":
-            primary_keys = ds_config.get("primary_key")
-            if not primary_keys:
-                raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for dataset '{dataset}'.")
+        # Check if the transformer returned a dictionary of dataframes (for normalized schemas)
+        if isinstance(transformed_output, dict):
+            print(f"--- Loading multiple tables for dataset '{dataset}' (mode: {load_mode}) ---")
+            for table_name, df in transformed_output.items():
+                print(f"Loading data into {schema_name}.{table_name}...")
+                if df.empty:
+                    print(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
+                    continue
 
-            staging_table_name = f"staging_{table_name}"
+                # For now, multi-table output only supports append/overwrite. Merge is complex.
+                if load_mode == "merge":
+                    print(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
+                    current_load_mode = "overwrite"
+                else:
+                    current_load_mode = load_mode
 
-            # Create a temporary schema for the staging table
-            staging_schema = {
-                "schema_name": schema_name,
-                "tables": {
-                    staging_table_name: {
-                        "columns": target_schema_def["tables"][table_name]["columns"]
-                    }
-                }
-            }
-
-            try:
-                print(f"Creating staging table: {schema_name}.{staging_table_name}")
-                adapter.ensure_schema(staging_schema)
-
-                print(f"Loading data into staging table...")
                 adapter.bulk_load(
-                    data=transformed_df,
-                    target_table=staging_table_name,
-                    schema=schema_name,
-                    mode="overwrite", # Always overwrite the staging table
-                )
-
-                print("Executing merge operation...")
-                adapter.execute_merge(
-                    staging_table=staging_table_name,
+                    data=df,
                     target_table=table_name,
-                    primary_keys=primary_keys,
                     schema=schema_name,
+                    mode=current_load_mode,
                 )
-            finally:
-                # Ensure the staging table is always dropped
-                print(f"Dropping staging table: {schema_name}.{staging_table_name}")
-                adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
-
-        else: # Handles 'append' and 'overwrite'
-            adapter.bulk_load(
-                data=transformed_df,
-                target_table=table_name,
-                schema=schema_name,
-                mode=load_mode,
-            )
+        # Handle single dataframe output (legacy or simple schemas)
+        else:
+            table_name = ds_config["table_name"]
+            print(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
+            df = transformed_output
+            if df.empty:
+                print("Transformed DataFrame is empty. Nothing to load.")
+            elif load_mode == "merge":
+                # Existing merge logic for single table datasets
+                primary_keys = ds_config.get("primary_key")
+                if not primary_keys:
+                    raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for dataset '{dataset}'.")
+                staging_table_name = f"staging_{table_name}"
+                staging_schema = {"schema_name": schema_name, "tables": {staging_table_name: {"columns": target_schema_def["tables"][table_name]["columns"]}}}
+                try:
+                    adapter.ensure_schema(staging_schema)
+                    adapter.bulk_load(data=df, target_table=staging_table_name, schema=schema_name, mode="overwrite")
+                    adapter.execute_merge(staging_table=staging_table_name, target_table=table_name, primary_keys=primary_keys, schema=schema_name)
+                finally:
+                    adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
+            else: # Handles 'append' and 'overwrite' for single table
+                adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=load_mode)
 
         # 8. Update State
         status = "SUCCESS"
