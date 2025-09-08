@@ -1,0 +1,16 @@
+# Sample configuration file for py-load-pmda
+#
+# This file contains the default settings for connecting to the target database.
+# These settings can be overridden by environment variables.
+# For example, to override the database host, set the PMDA_DB_HOST environment variable.
+
+database:
+  # The type of database adapter to use. 'postgres' is the default.
+  type: "postgres"
+
+  # Connection details for the target database.
+  host: "localhost"
+  port: 5432
+  user: "admin"
+  password: "password"
+  dbname: "pmda_db"
