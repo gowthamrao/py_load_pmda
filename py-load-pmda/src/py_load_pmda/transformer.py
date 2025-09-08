@@ -237,3 +237,65 @@ class JaderTransformer:
             "jader_drug": drug_df_transformed,
             "jader_reaction": reac_df_transformed
         }
+
+
+class PackageInsertsTransformer:
+    """
+    Transforms a raw DataFrame from a Package Insert PDF into a standardized format.
+    """
+    def __init__(self, source_url: str):
+        self.source_url = source_url
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transforms the raw DataFrame to match a generic document schema.
+
+        Since the content of the PDF tables is not yet known, this transformer
+        focuses on meeting the data fidelity requirements of the FRD by storing
+        the entire raw content in a JSONB-compatible column and adding metadata.
+
+        Args:
+            df: The raw DataFrame from the PackageInsertsParser.
+
+        Returns:
+            A transformed, single-row DataFrame ready for loading.
+        """
+        if df.empty:
+            return pd.DataFrame()
+
+        # 1. Create the 'raw_data_full' JSONB object
+        # This captures all the extracted tables in a structured way.
+        raw_data_full = {
+            "source_file_type": "pdf",
+            "extracted_tables": df.to_dict(orient='records')
+        }
+        raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
+
+        # 2. Create a primary key for the document.
+        # We use a hash of the source URL for a deterministic ID.
+        document_id = hashlib.sha256(self.source_url.encode('utf-8')).hexdigest()
+
+        # 3. Create the single-row DataFrame
+        transformed_data = {
+            "document_id": document_id,
+            "raw_data_full": raw_data_full_json,
+            "_meta_source_url": self.source_url,
+            "_meta_extraction_ts_utc": datetime.now(timezone.utc),
+            "_meta_load_ts_utc": datetime.now(timezone.utc), # Placeholder, will be updated at load time
+            "_meta_pipeline_version": version("py-load-pmda"),
+            "_meta_source_content_hash": hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
+        }
+
+        final_df = pd.DataFrame([transformed_data])
+
+        # 4. Define and order final columns
+        final_columns = [
+            'document_id',
+            'raw_data_full',
+            '_meta_source_url',
+            '_meta_extraction_ts_utc',
+            '_meta_load_ts_utc',
+            '_meta_pipeline_version',
+            '_meta_source_content_hash'
+        ]
+        return final_df[final_columns]

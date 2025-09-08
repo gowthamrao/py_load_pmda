@@ -3,6 +3,47 @@ from pathlib import Path
 import zipfile
 import io
 from typing import Dict, List
+import tabula
+
+class PackageInsertsParser:
+    """
+    Parses downloaded Package Insert PDF files using tabula-py.
+    """
+    def parse(self, file_path: Path) -> pd.DataFrame:
+        """
+        Parses the PDF file and returns a pandas DataFrame containing table data.
+
+        Args:
+            file_path: The path to the PDF file.
+
+        Returns:
+            A DataFrame containing the concatenated table data from the PDF.
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"The file {file_path} does not exist.")
+
+        print(f"Parsing PDF file: {file_path}")
+        try:
+            # Read all tables from all pages of the PDF
+            # This returns a list of DataFrames
+            tables = tabula.read_pdf(file_path, pages="all", multiple_tables=True, lattice=True)
+
+            if not tables:
+                print(f"Warning: No tables found in {file_path}.")
+                return pd.DataFrame()
+
+            # Concatenate all found tables into a single DataFrame
+            full_df = pd.concat(tables, ignore_index=True)
+            print(f"Successfully extracted and concatenated {len(tables)} tables from PDF.")
+            return full_df
+
+        except Exception as e:
+            # This can catch various errors, including Java not being installed,
+            # or the PDF being unparseable.
+            print(f"Error parsing PDF file {file_path}: {e}")
+            print("Please ensure you have Java installed and in your PATH for tabula-py to work.")
+            raise
+
 
 class ApprovalsParser:
     """

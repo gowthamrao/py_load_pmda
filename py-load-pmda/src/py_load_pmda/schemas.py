@@ -99,8 +99,29 @@ PMDA_JADER_SCHEMA = {
     },
 }
 
+# Schema for the Package Inserts data
+PMDA_PACKAGE_INSERTS_SCHEMA = {
+    "schema_name": "public",
+    "tables": {
+        "pmda_package_inserts": {
+            "columns": {
+                "document_id": "VARCHAR(64) NOT NULL",
+                "raw_data_full": "JSONB",
+                "_meta_source_url": "TEXT",
+                "_meta_extraction_ts_utc": "TIMESTAMPTZ",
+                "_meta_load_ts_utc": "TIMESTAMPTZ",
+                "_meta_pipeline_version": "VARCHAR(50)",
+                "_meta_source_content_hash": "VARCHAR(64)",
+            },
+            "primary_key": "document_id",
+        }
+    }
+}
+
+
 # A dictionary to map dataset IDs to their schema definitions
 DATASET_SCHEMAS = {
     "approvals": PMDA_APPROVALS_SCHEMA,
     "jader": PMDA_JADER_SCHEMA,
+    "package_inserts": PMDA_PACKAGE_INSERTS_SCHEMA,
 }

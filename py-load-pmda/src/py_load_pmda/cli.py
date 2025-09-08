@@ -13,16 +13,19 @@ app = typer.Typer()
 AVAILABLE_EXTRACTORS = {
     "ApprovalsExtractor": extractor.ApprovalsExtractor,
     "JaderExtractor": extractor.JaderExtractor,
+    "PackageInsertsExtractor": extractor.PackageInsertsExtractor,
 }
 
 AVAILABLE_PARSERS = {
     "ApprovalsParser": parser.ApprovalsParser,
     "JaderParser": parser.JaderParser,
+    "PackageInsertsParser": parser.PackageInsertsParser,
 }
 
 AVAILABLE_TRANSFORMERS = {
     "ApprovalsTransformer": transformer.ApprovalsTransformer,
     "JaderTransformer": transformer.JaderTransformer,
+    "PackageInsertsTransformer": transformer.PackageInsertsTransformer,
 }
 
 
@@ -112,29 +115,82 @@ def run(
         extract_args = {"last_state": last_state}
         if dataset == "approvals":
             extract_args['year'] = year
+        elif dataset == "package_inserts":
+            # TODO: Make this list of drug names a configurable CLI option
+            extract_args['drug_names'] = ["スリンダ錠28", "ロキソニン"]
 
-        file_path, source_url, new_state = extractor_instance.extract(**extract_args)
+        # The extract method's return signature may vary.
+        extracted_output = extractor_instance.extract(**extract_args)
+        new_state = extracted_output[-1] # By convention, new_state is the last element
 
         # If the new state is the same as the old state, we can stop.
         if new_state == last_state and last_state:
-             print("Data source has not changed since last run. Pipeline will stop.")
-             status = "SUCCESS"
-             # We still want to update the 'last_run_ts_utc' in the state table
-             adapter.update_state(dataset, state=new_state, status=status, schema=schemas.INGESTION_STATE_SCHEMA["schema_name"])
-             adapter.commit()
-             return
+            print("Data source has not changed since last run. Pipeline will stop.")
+            status = "SUCCESS"
+            # We still want to update the 'last_run_ts_utc' in the state table
+            adapter.update_state(dataset, state=new_state, status=status, schema=schemas.INGESTION_STATE_SCHEMA["schema_name"])
+            adapter.commit()
+            return
 
-        # B. Parse
-        print(f"--- Running Parser: {ds_config['parser']} ---")
-        parser_instance = parser_class()
-        raw_df = parser_instance.parse(file_path)
+        # B/C/L. Parse, Transform, and Load
+        # This part needs to handle different return types from extractors.
+        if dataset == "package_inserts":
+            # For package inserts, we get a list of file paths and we process them one by one.
+            downloaded_files, all_new_states = extracted_output
+            new_state = all_new_states # The combined state from all downloaded files
 
-        # C. Transform
-        print(f"--- Running Transformer: {ds_config['transformer']} ---")
-        transformer_instance = transformer_class(source_url=source_url)
-        transformed_output = transformer_instance.transform(raw_df)
+            for file_path in downloaded_files:
+                print(f"\n--- Processing file: {file_path.name} ---")
+                # B. Parse
+                parser_instance = parser_class()
+                raw_df = parser_instance.parse(file_path)
+                if raw_df.empty:
+                    print(f"Parser returned empty DataFrame for {file_path.name}. Skipping.")
+                    continue
 
-        # 7. Load
+                # C. Transform
+                # The source URL for a package insert is not easily available from the extractor,
+                # so we will use the filename as a stand-in for the transformer's source_url.
+                transformer_instance = transformer_class(source_url=file_path.name)
+                transformed_df = transformer_instance.transform(raw_df)
+
+                # D. Load
+                load_mode = mode or ds_config.get("load_mode", "merge")
+                table_name = ds_config["table_name"]
+                schema_name = ds_config["schema_name"]
+                primary_keys = ds_config.get("primary_key")
+
+                print(f"--- Loading data for {file_path.name} to {schema_name}.{table_name} (mode: {load_mode}) ---")
+                if load_mode == "merge":
+                    if not primary_keys:
+                        raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for dataset '{dataset}'.")
+                    staging_table_name = f"staging_{table_name}"
+                    staging_schema = {"schema_name": schema_name, "tables": {staging_table_name: {"columns": target_schema_def["tables"][table_name]["columns"]}}}
+                    try:
+                        adapter.ensure_schema(staging_schema)
+                        adapter.bulk_load(data=transformed_df, target_table=staging_table_name, schema=schema_name, mode="overwrite")
+                        adapter.execute_merge(staging_table=staging_table_name, target_table=table_name, primary_keys=primary_keys, schema=schema_name)
+                    finally:
+                        adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
+                else:
+                     adapter.bulk_load(data=transformed_df, target_table=table_name, schema=schema_name, mode=load_mode)
+
+            # After the loop, the main logic continues to the 'finally' block to update the overall state.
+            status = "SUCCESS"
+
+        else: # Legacy path for approvals and jader
+            # B. Parse
+            file_path, source_url, new_state = extracted_output
+            print(f"--- Running Parser: {ds_config['parser']} ---")
+            parser_instance = parser_class()
+            raw_df = parser_instance.parse(file_path)
+
+            # C. Transform
+            print(f"--- Running Transformer: {ds_config['transformer']} ---")
+            transformer_instance = transformer_class(source_url=source_url)
+            transformed_output = transformer_instance.transform(raw_df)
+
+            # 7. Load
         load_mode = mode or ds_config.get("load_mode", "overwrite")
         schema_name = ds_config["schema_name"]
 

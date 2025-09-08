@@ -2,6 +2,7 @@ import os
 import requests
 import time
 import random
+import hashlib
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from pathlib import Path
@@ -36,6 +37,25 @@ class BaseExtractor:
                     time.sleep(wait_time)
                 else:
                     print(f"Request to {url} failed after {self.retries} attempts.")
+                    raise e
+
+    def _send_post_request(self, url: str, data: dict, headers: dict = None, stream: bool = False) -> requests.Response:
+        """
+        Sends an HTTP POST request with retries and exponential backoff.
+        """
+        for attempt in range(self.retries):
+            try:
+                time.sleep(1)
+                response = requests.post(url, data=data, headers=headers, stream=stream, timeout=30)
+                response.raise_for_status()
+                return response
+            except requests.RequestException as e:
+                if attempt < self.retries - 1:
+                    wait_time = self.backoff_factor * (2 ** attempt) + random.uniform(0, 1)
+                    print(f"POST request to {url} failed. Retrying in {wait_time:.2f} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"POST request to {url} failed after {self.retries} attempts.")
                     raise e
 
     def _get_page_content(self, url: str) -> BeautifulSoup:
@@ -159,3 +179,80 @@ class JaderExtractor(BaseExtractor):
 
         print(f"Found {len(jader_zip_files)} JADER .zip file(s) in cache.")
         return jader_zip_files, self.jader_info_url, self.new_state
+
+
+class PackageInsertsExtractor(BaseExtractor):
+    """
+    Extracts Package Inserts from the PMDA search portal.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # The POST request goes to a URL without a trailing slash.
+        self.search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
+
+    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Path], dict]:
+        """
+        Main extraction method for package inserts.
+        It searches for each drug name and downloads the corresponding package insert PDF.
+        """
+        print("--- Package Inserts Extractor ---")
+        downloaded_files = []
+        all_new_states = {}
+
+        for name in drug_names:
+            print(f"Searching for package insert for drug: '{name}'")
+
+            # This payload is based on reverse-engineering the search form.
+            form_data = {
+                "nameWord": name,
+                "dispColumnsList[0]": "1", # '1' is the value for '添付文書' (Package Insert)
+                "_dispColumnsList[0]": "on",
+                "nccharset": "EBBEE281", # This seems to be a required token
+                "tglOpFlg": "",
+                "isNewReleaseDisp": "true",
+                "listCategory": ""
+            }
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Referer": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/"
+            }
+
+            try:
+                # Step 1: POST to the search form to get the results page
+                print(f"Submitting search form for '{name}'...")
+                response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                response.encoding = response.apparent_encoding
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                # Step 2: Find the first PDF download link on the results page.
+                # We assume the first PDF link in the main content area is the correct one.
+                # This is a pragmatic approach as the page structure is complex.
+                main_content = soup.find("div", id="ContentMainArea")
+                if not main_content:
+                    print(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    continue
+
+                link = main_content.find("a", href=lambda href: href and ".pdf" in href)
+
+                if not link or not link.has_attr("href"):
+                    print(f"Could not find a PDF download link for '{name}'. Skipping.")
+                    continue
+
+                # The links are relative, so we need to join them with the base URL.
+                download_url = urljoin("https://www.pmda.go.jp", link["href"])
+                print(f"Found download link: {download_url}")
+
+                # Step 3: Download the file using the robust method from BaseExtractor
+                # ETag checking will prevent re-downloads if the file is unchanged.
+                file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
+                if file_path and file_path.exists():
+                    downloaded_files.append(file_path)
+                    all_new_states[download_url] = self.new_state
+
+            except requests.RequestException as e:
+                print(f"Failed to process '{name}': {e}")
+                continue
+
+        print(f"Downloaded {len(downloaded_files)} package insert(s).")
+        return downloaded_files, all_new_states
