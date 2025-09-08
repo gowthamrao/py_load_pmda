@@ -1,16 +1,39 @@
-# Sample configuration file for py-load-pmda
+# Configuration file for py-load-pmda
 #
-# This file contains the default settings for connecting to the target database.
-# These settings can be overridden by environment variables.
-# For example, to override the database host, set the PMDA_DB_HOST environment variable.
+# This file contains settings for the database connection and for each
+# dataset to be processed. Settings can be overridden by environment variables.
 
 database:
   # The type of database adapter to use. 'postgres' is the default.
   type: "postgres"
 
   # Connection details for the target database.
+  # These can be overridden by env vars like PMDA_DB_HOST, PMDA_DB_USER, etc.
   host: "localhost"
   port: 5432
   user: "admin"
   password: "password"
   dbname: "pmda_db"
+
+datasets:
+  approvals:
+    # Class names for the ETL components for this dataset
+    extractor: "ApprovalsExtractor"
+    parser: "ApprovalsParser"
+    transformer: "ApprovalsTransformer"
+
+    # Target table and schema in the database
+    table_name: "pmda_approvals"
+    schema_name: "public"
+
+    # Load strategy configuration
+    load_mode: "overwrite" # or "append", "merge"
+    primary_key: ["approval_id"] # for merge mode
+
+  jader:
+    extractor: "JaderExtractor"
+    parser: "JaderParser" # To be created
+    transformer: "JaderTransformer" # To be created
+    table_name: "pmda_jader"
+    schema_name: "public"
+    load_mode: "append"

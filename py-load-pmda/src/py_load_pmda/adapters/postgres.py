@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from importlib.metadata import version
 import pandas as pd
 import psycopg2
+import psycopg2.extras
 from psycopg2 import sql
 from py_load_pmda.interfaces import LoaderInterface
 
@@ -223,7 +224,7 @@ class PostgreSQLAdapter(LoaderInterface):
                 self.conn.rollback()
                 raise
 
-    def get_latest_state(self, dataset_id: str, schema: str = "public") -> dict:
+    def get_latest_state(self, dataset_id: str, schema: str) -> dict:
         """
         Retrieve the latest ingestion state for a dataset from PostgreSQL.
         The state is assumed to be in a table named 'ingestion_state'.
@@ -240,7 +241,7 @@ class PostgreSQLAdapter(LoaderInterface):
                 return result[0]
             return {}
 
-    def update_state(self, dataset_id: str, state: dict, status: str, schema: str = "public") -> None:
+    def update_state(self, dataset_id: str, state: dict, status: str, schema: str) -> None:
         """
         Transactionally update the ingestion state after a load in PostgreSQL.
         """
@@ -281,3 +282,15 @@ class PostgreSQLAdapter(LoaderInterface):
                 print(f"Error updating state for dataset '{dataset_id}': {e}")
                 self.conn.rollback()
                 raise
+
+    def get_all_states(self, schema: str) -> list[dict]:
+        """Retrieve all ingestion states from the database."""
+        if not self.conn:
+            raise ConnectionError("Not connected. Call connect() first.")
+
+        query = f"SELECT * FROM {schema}.ingestion_state ORDER BY dataset_id;"
+
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
+            cursor.execute(query)
+            results = cursor.fetchall()
+            return [dict(row) for row in results]
