@@ -153,6 +153,18 @@ files = [
 markers = {main = "platform_system == \"Windows\"", dev = "platform_system == \"Windows\" or sys_platform == \"win32\""}
 
 [[package]]
+name = "distro"
+version = "1.9.0"
+description = "Distro - an OS platform information API"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2"},
+    {file = "distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed"},
+]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 description = "An implementation of lxml.xmlfile for the standard library"
@@ -738,6 +750,29 @@ files = [
 ]
 
 [[package]]
+name = "tabula-py"
+version = "2.10.0"
+description = "Simple wrapper for tabula-java, read tables from PDF into DataFrame"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "tabula_py-2.10.0-py3-none-any.whl", hash = "sha256:c7596c559fc813e313eb4fbc7aabe7e4290dbd04717c4cbe4aa4a2cafd00ab63"},
+    {file = "tabula_py-2.10.0.tar.gz", hash = "sha256:75968a83fe978e5d56ccf23f0f0255a459c256b7b52db7cabe5ac795bb3b12df"},
+]
+
+[package.dependencies]
+distro = "*"
+numpy = ">1.24.4"
+pandas = ">=0.25.3"
+
+[package.extras]
+dev = ["Flake8-pyproject", "mypy", "pytest", "ruff"]
+doc = ["Jinja2 (==3.1.2)", "sphinx (==7.1.2)", "sphinx-rtd-theme (==1.3.0)"]
+jpype = ["jpype1"]
+test = ["pytest"]
+
+[[package]]
 name = "typer"
 version = "0.17.4"
 description = "Typer, build great CLIs. Easy to code. Based on Python type hints."
@@ -803,4 +838,4 @@ postgres = ["psycopg2-binary"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "aaf3c01ab6c8b8f9fa7f1ffb52dc037e5e2d8fadc412b6ba2400e83c06127615"
+content-hash = "5d3401c824e7decd6e69a73ca4603f71a85bbdd3de7b703b09dbe5017a8bf826"

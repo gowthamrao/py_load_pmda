@@ -32,8 +32,25 @@ datasets:
 
   jader:
     extractor: "JaderExtractor"
-    parser: "JaderParser" # To be created
-    transformer: "JaderTransformer" # To be created
+    parser: "JaderParser"
+    transformer: "JaderTransformer"
     table_name: "pmda_jader"
     schema_name: "public"
     load_mode: "append"
+
+  package_inserts:
+    extractor: "PackageInsertsExtractor"
+    parser: "PackageInsertsParser"
+    transformer: "PackageInsertsTransformer"
+    table_name: "pmda_package_inserts"
+    schema_name: "public"
+    load_mode: "merge"
+    primary_key: ["document_id"]
+    columns:
+      document_id: "VARCHAR(64)"
+      raw_data_full: "JSONB"
+      _meta_source_url: "TEXT"
+      _meta_extraction_ts_utc: "TIMESTAMPTZ"
+      _meta_load_ts_utc: "TIMESTAMPTZ"
+      _meta_pipeline_version: "VARCHAR(50)"
+      _meta_source_content_hash: "VARCHAR(64)"
