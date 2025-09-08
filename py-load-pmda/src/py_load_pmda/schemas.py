@@ -49,12 +49,12 @@ PMDA_APPROVALS_SCHEMA = {
 }
 
 # Schema for the JADER (Japanese Adverse Drug Event Report) data
+# This schema is normalized into three tables to align with the FRD.
 PMDA_JADER_SCHEMA = {
     "schema_name": "public",
     "tables": {
-        "pmda_jader": {
+        "jader_case": {
             "columns": {
-                # Case and Patient Info
                 "case_id": "VARCHAR(50) NOT NULL",
                 "report_count": "INTEGER",
                 "gender": "VARCHAR(10)",
@@ -65,27 +65,38 @@ PMDA_JADER_SCHEMA = {
                 "status": "TEXT",
                 "report_type": "TEXT",
                 "reporter_qualification": "TEXT",
-                # Drug Info
-                "drug_involvement": "TEXT",
-                "drug_generic_name": "TEXT NOT NULL",
-                "drug_brand_name": "TEXT",
-                "drug_usage_reason": "TEXT",
-                # Reaction Info
-                "reaction_event_name": "TEXT NOT NULL",
-                "reaction_outcome": "TEXT",
-                "reaction_onset_date": "DATE",
-                # Metadata
                 "raw_data_full": "JSONB",
                 "_meta_load_ts_utc": "TIMESTAMPTZ",
                 "_meta_source_url": "TEXT",
                 "_meta_pipeline_version": "VARCHAR(50)",
                 "_meta_source_content_hash": "VARCHAR(64)",
             },
-            # A single case can have multiple drugs and multiple reactions,
-            # so we need a composite primary key to uniquely identify a row.
-            "primary_key": "case_id, drug_generic_name, reaction_event_name",
-        }
-    }
+            "primary_key": "case_id",
+        },
+        "jader_drug": {
+            "columns": {
+                "drug_id": "VARCHAR(64) NOT NULL",  # A unique hash of the row
+                "case_id": "VARCHAR(50) NOT NULL",  # FK to jader_case
+                "drug_involvement": "TEXT",
+                "drug_generic_name": "TEXT",
+                "drug_brand_name": "TEXT",
+                "drug_usage_reason": "TEXT",
+            },
+            "primary_key": "drug_id",
+            # Foreign key constraints are not explicitly defined here to maintain
+            # adapter-agnosticism, but are expected to be enforced by the loader if possible.
+        },
+        "jader_reaction": {
+            "columns": {
+                "reaction_id": "VARCHAR(64) NOT NULL",  # A unique hash of the row
+                "case_id": "VARCHAR(50) NOT NULL",  # FK to jader_case
+                "reaction_event_name": "TEXT",
+                "reaction_outcome": "TEXT",
+                "reaction_onset_date": "DATE",
+            },
+            "primary_key": "reaction_id",
+        },
+    },
 }
 
 # A dictionary to map dataset IDs to their schema definitions

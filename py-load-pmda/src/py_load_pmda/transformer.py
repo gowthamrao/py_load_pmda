@@ -114,95 +114,126 @@ class ApprovalsTransformer:
 
 class JaderTransformer:
     """
-    Transforms the raw JADER DataFrames into a single, standardized DataFrame.
+    Transforms the raw JADER DataFrames into a dictionary of normalized,
+    standardized DataFrames ready for loading into separate tables.
     """
     def __init__(self, source_url: str):
         self.source_url = source_url
-        # Define column name mappings
-        self.rename_map = {
-            '識別番号': 'case_id',
-            '報告回数': 'report_count',
-            '性別': 'gender',
-            '年齢': 'age',
-            '体重': 'weight',
-            '身長': 'height',
-            '報告年度・四半期': 'report_fiscal_quarter',
-            '状況': 'status',
-            '報告の種類': 'report_type',
-            '報告者の資格': 'reporter_qualification',
-            '医薬品の関与': 'drug_involvement',
-            '医薬品（一般名）': 'drug_generic_name',
-            '医薬品（販売名）': 'drug_brand_name',
-            '使用理由': 'drug_usage_reason',
-            '有害事象': 'reaction_event_name',
-            '転帰': 'reaction_outcome',
+        self.pipeline_version = version("py-load-pmda")
+
+    def _rename_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Renames columns from Japanese to standardized English names."""
+        rename_map = {
+            '識別番号': 'case_id', '報告回数': 'report_count', '性別': 'gender',
+            '年齢': 'age', '体重': 'weight', '身長': 'height',
+            '報告年度・四半期': 'report_fiscal_quarter', '状況': 'status',
+            '報告の種類': 'report_type', '報告者の資格': 'reporter_qualification',
+            '医薬品の関与': 'drug_involvement', '医薬品（一般名）': 'drug_generic_name',
+            '医薬品（販売名）': 'drug_brand_name', '使用理由': 'drug_usage_reason',
+            '有害事象': 'reaction_event_name', '転帰': 'reaction_outcome',
             '有害事象の発現日': 'reaction_onset_date',
         }
+        df.rename(columns=rename_map, inplace=True)
+        return df
 
-    def _aggregate_to_json(self, df: pd.DataFrame, group_by_col: str) -> pd.DataFrame:
-        """Groups a DataFrame and aggregates the rows into a JSON string."""
-        return (
-            df.groupby(group_by_col)
-            .apply(lambda x: x.to_json(orient='records', force_ascii=False))
-            .reset_index(name='aggregated_json')
+    def _generate_hash_id(self, df: pd.DataFrame, id_col_name: str) -> pd.DataFrame:
+        """Generates a unique ID for each row by hashing its contents."""
+        # Ensure consistent dict ordering for hashing
+        df[id_col_name] = df.apply(
+            lambda row: hashlib.sha256(
+                json.dumps(row.to_dict(), sort_keys=True).encode('utf-8')
+            ).hexdigest(),
+            axis=1
         )
+        return df
 
-    def transform(self, data_frames: dict) -> pd.DataFrame:
+    def transform(self, data_frames: dict) -> dict[str, pd.DataFrame]:
         """
-        Transforms the raw JADER data into a single, analysis-ready DataFrame.
+        Transforms the raw JADER data into a dictionary of analysis-ready DataFrames.
+        Returns:
+            A dictionary of DataFrames for 'jader_case', 'jader_drug', 'jader_reaction'.
         """
         case_df = data_frames.get("case")
         demo_df = data_frames.get("demo")
         drug_df = data_frames.get("drug")
         reac_df = data_frames.get("reac")
 
-        if case_df is None or demo_df is None or drug_df is None or reac_df is None:
+        if any(df is None for df in [case_df, demo_df, drug_df, reac_df]):
             raise ValueError("One or more required JADER dataframes are missing.")
 
-        # --- 1. Create the `raw_data_full` representation ---
-        # For each case, we want a JSON object containing the original rows from all tables.
-        # We'll aggregate drug and reaction data first.
-        drug_agg = self._aggregate_to_json(drug_df, '識別番号')
-        reac_agg = self._aggregate_to_json(reac_df, '識別番号')
+        # --- 1. Rename all columns first for consistency ---
+        case_df_orig = case_df.copy()
+        demo_df_orig = demo_df.copy()
+        drug_df_orig = drug_df.copy()
+        reac_df_orig = reac_df.copy()
 
-        # Merge these aggregated JSON strings with the demo table
-        raw_merged = demo_df.merge(drug_agg, on='識別番号', how='left').merge(reac_agg, on='識別番号', how='left')
-        raw_merged.rename(columns={'aggregated_json_x': 'drugs_raw', 'aggregated_json_y': 'reactions_raw'}, inplace=True)
+        case_df = self._rename_columns(case_df.copy())
+        demo_df = self._rename_columns(demo_df.copy())
+        drug_df = self._rename_columns(drug_df.copy())
+        reac_df = self._rename_columns(reac_df.copy())
 
-        # Now create the final raw JSON object for each case
-        raw_merged['raw_data_full'] = raw_merged.to_json(orient='records', lines=True).splitlines()
+        # --- 2. Transform `jader_drug` table ---
+        drug_cols_to_select = [
+            'case_id', 'drug_involvement', 'drug_generic_name',
+            'drug_brand_name', 'drug_usage_reason'
+        ]
+        existing_drug_cols = [col for col in drug_cols_to_select if col in drug_df.columns]
+        drug_df_transformed = drug_df[existing_drug_cols]
+        drug_df_transformed = self._generate_hash_id(drug_df_transformed, 'drug_id')
 
-        # --- 2. Create the Standard Representation ---
-        # Merge the main dataframes. This can create many rows per case.
-        # The DEMO, DRUG, and REAC files do not contain '報告回数', so we merge on '識別番号' only.
-        merged_df = case_df.merge(demo_df, on='識別番号', how='left')
-        merged_df = merged_df.merge(drug_df, on='識別番号', how='left')
-        merged_df = merged_df.merge(reac_df, on='識別番号', how='left')
+        # --- 3. Transform `jader_reaction` table ---
+        reac_cols_to_select = [
+            'case_id', 'reaction_event_name', 'reaction_outcome', 'reaction_onset_date'
+        ]
+        existing_reac_cols = [col for col in reac_cols_to_select if col in reac_df.columns]
+        reac_df_transformed = reac_df[existing_reac_cols]
 
-        # --- 3. Clean and Standardize ---
-        merged_df.rename(columns=self.rename_map, inplace=True)
+        if 'reaction_onset_date' in reac_df_transformed.columns:
+            reac_df_transformed['reaction_onset_date'] = utils.to_iso_date(reac_df_transformed['reaction_onset_date'])
+        reac_df_transformed = self._generate_hash_id(reac_df_transformed, 'reaction_id')
 
-        # Use the robust date conversion utility
-        if 'reaction_onset_date' in merged_df.columns:
-            merged_df['reaction_onset_date'] = utils.to_iso_date(merged_df['reaction_onset_date'])
+        # --- 4. Transform `jader_case` table ---
+        case_df_transformed = pd.merge(case_df, demo_df, on='case_id', how='left')
 
-        # Add the raw_data_full column by merging it back
-        final_df = merged_df.merge(raw_merged[['識別番号', 'raw_data_full']], left_on='case_id', right_on='識別番号', how='left')
+        # Create the `raw_data_full` JSONB column for auditability
+        raw_data = {}
+        for case_id in case_df['case_id'].unique():
+            raw_data[case_id] = {
+                "source_case": case_df_orig[case_df_orig['識別番号'] == case_id].to_dict(orient='records'),
+                "source_demo": demo_df_orig[demo_df_orig['識別番号'] == case_id].to_dict(orient='records'),
+                "source_drugs": drug_df_orig[drug_df_orig['識別番号'] == case_id].to_dict(orient='records'),
+                "source_reactions": reac_df_orig[reac_df_orig['識別番号'] == case_id].to_dict(orient='records'),
+            }
 
-        # --- 4. Add Metadata ---
-        final_df['_meta_load_ts_utc'] = datetime.now(timezone.utc)
-        final_df['_meta_source_url'] = self.source_url
-        final_df['_meta_pipeline_version'] = version("py-load-pmda")
-        final_df['_meta_source_content_hash'] = final_df['raw_data_full'].apply(
+        case_df_transformed['raw_data_full'] = case_df_transformed['case_id'].map(
+            lambda cid: json.dumps(raw_data.get(cid), ensure_ascii=False) if raw_data.get(cid) else None
+        )
+
+        # Add metadata
+        load_ts = datetime.now(timezone.utc)
+        case_df_transformed['_meta_load_ts_utc'] = load_ts
+        case_df_transformed['_meta_source_url'] = self.source_url
+        case_df_transformed['_meta_pipeline_version'] = self.pipeline_version
+        case_df_transformed['_meta_source_content_hash'] = case_df_transformed['raw_data_full'].apply(
             lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest() if pd.notna(x) else None
         )
 
-        # --- 5. Final Column Selection ---
-        # This part will need a proper schema definition later
-        final_columns = list(self.rename_map.values()) + [
+        # Select final columns
+        case_cols = [
+            'case_id', 'report_count', 'gender', 'age', 'weight', 'height',
+            'report_fiscal_quarter', 'status', 'report_type', 'reporter_qualification',
             'raw_data_full', '_meta_load_ts_utc', '_meta_source_url',
             '_meta_pipeline_version', '_meta_source_content_hash'
         ]
-        existing_cols = [col for col in final_columns if col in final_df.columns]
+        # Ensure all columns are present, adding missing ones as None
+        for col in case_cols:
+            if col not in case_df_transformed:
+                case_df_transformed[col] = None
 
-        return final_df[existing_cols]
+        case_df_transformed = case_df_transformed[case_cols]
+
+        return {
+            "jader_case": case_df_transformed,
+            "jader_drug": drug_df_transformed,
+            "jader_reaction": reac_df_transformed
+        }
