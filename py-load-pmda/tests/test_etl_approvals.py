@@ -10,40 +10,53 @@ from py_load_pmda.transformer import ApprovalsTransformer
 @pytest.fixture
 def mock_pmda_pages(mocker):
     """Mocks the requests.get calls to return fake PMDA HTML pages."""
+
+    # Using a class to better structure the mock responses
+    class MockResponse:
+        def __init__(self, text="", status_code=200, headers=None, content=None, apparent_encoding="utf-8"):
+            self.text = text
+            self.status_code = status_code
+            self.headers = headers or {}
+            self._content = content or b""
+            self.apparent_encoding = apparent_encoding
+            self.encoding = None # Can be set by the calling code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise Exception("HTTP Error")
+
+        def iter_content(self, chunk_size):
+            yield self._content
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            pass
+
     mock_responses = {
-        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0010.html": MagicMock(
+        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0010.html": MockResponse(
             text="""
             <html><body>
                 <a href="/review-services/drug-reviews/review-information/p-drugs/0039.html">2025年度</a>
             </body></html>
-            """,
-            apparent_encoding="utf-8",
+            """
         ),
-        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0039.html": MagicMock(
+        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0039.html": MockResponse(
             text="""
             <html><body>
                 <a href="/files/000276012.xlsx">別表</a>
             </body></html>
-            """,
-            apparent_encoding="utf-8",
+            """
         ),
-        "https://www.pmda.go.jp/files/000276012.xlsx": MagicMock(
-            status_code=200,
-            headers={"ETag": "test-etag"},
-            iter_content=lambda chunk_size: [b"dummy excel content"],
+        "https://www.pmda.go.jp/files/000276012.xlsx": MockResponse(
+            content=b"dummy excel content",
+            headers={"ETag": "test-etag"}
         )
     }
 
     def get_side_effect(url, **kwargs):
-        mock_response = mock_responses.get(url)
-        if mock_response:
-            mock_response.raise_for_status = MagicMock()
-            return mock_response
-
-        # Default mock for any other URLs
-        default_response = MagicMock()
-        default_response.raise_for_status = MagicMock()
-        return default_response
+        return mock_responses.get(url, MockResponse(status_code=404))
 
     mocker.patch("requests.get", side_effect=get_side_effect)
 

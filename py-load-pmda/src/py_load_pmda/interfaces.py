@@ -41,11 +41,16 @@ class LoaderInterface(ABC):
         pass
 
     @abstractmethod
-    def get_latest_state(self, dataset_id: str) -> dict:
+    def get_latest_state(self, dataset_id: str, schema: str) -> dict:
         """Retrieve the latest ingestion state for a dataset."""
         pass
 
     @abstractmethod
-    def update_state(self, dataset_id: str, state: dict, status: str) -> None:
+    def update_state(self, dataset_id: str, state: dict, status: str, schema: str) -> None:
         """Transactionally update the ingestion state after a load."""
+        pass
+
+    @abstractmethod
+    def get_all_states(self, schema: str) -> list[dict]:
+        """Retrieve all ingestion states from the database."""
         pass
