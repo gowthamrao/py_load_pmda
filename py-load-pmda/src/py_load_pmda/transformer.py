@@ -114,34 +114,70 @@ class ApprovalsTransformer:
 
 class JaderTransformer:
     """
-    Transforms the raw JADER DataFrames into a dictionary of normalized,
-    standardized DataFrames ready for loading into separate tables.
+    Transforms the raw JADER DataFrames from the parser into a dictionary of
+    normalized, standardized DataFrames ready for loading.
     """
+
     def __init__(self, source_url: str):
         self.source_url = source_url
         self.pipeline_version = version("py-load-pmda")
+        self.extraction_ts = datetime.now(timezone.utc)
 
-    def _rename_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Renames columns from Japanese to standardized English names."""
-        rename_map = {
-            '識別番号': 'case_id', '報告回数': 'report_count', '性別': 'gender',
-            '年齢': 'age', '体重': 'weight', '身長': 'height',
-            '報告年度・四半期': 'report_fiscal_quarter', '状況': 'status',
-            '報告の種類': 'report_type', '報告者の資格': 'reporter_qualification',
-            '医薬品の関与': 'drug_involvement', '医薬品（一般名）': 'drug_generic_name',
-            '医薬品（販売名）': 'drug_brand_name', '使用理由': 'drug_usage_reason',
-            '有害事象': 'reaction_event_name', '転帰': 'reaction_outcome',
-            '有害事象の発現日': 'reaction_onset_date',
+        # Mappings from Japanese source columns to English schema columns
+        self.COLUMN_MAPS = {
+            "jader_demo": {
+                '識別番号': 'identification_number', '性別': 'gender', '年齢': 'age',
+                '体重': 'weight', '身長': 'height', '報告年度・四半期': 'report_fiscal_year_quarter',
+                '転帰': 'outcome', '報告区分': 'report_source', '報告者職種': 'reporter_qualification'
+            },
+            "jader_drug": {
+                '識別番号': 'identification_number', '医薬品の関与': 'drug_involvement',
+                '医薬品名': 'drug_name', '使用理由': 'usage_reason'
+            },
+            "jader_reac": {
+                '識別番号': 'identification_number', '副作用名': 'adverse_event_name',
+                '発現日': 'onset_date'
+            },
+            "jader_hist": {
+                '識別番号': 'identification_number', '原疾患等': 'past_medical_history'
+            }
         }
-        df.rename(columns=rename_map, inplace=True)
+        self.ID_COLUMNS = {
+            "jader_drug": "drug_id",
+            "jader_reac": "reac_id",
+            "jader_hist": "hist_id"
+        }
+
+    def _add_metadata(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Adds all required metadata columns to a DataFrame."""
+        df['_meta_load_ts_utc'] = datetime.now(timezone.utc)
+        df['_meta_extraction_ts_utc'] = self.extraction_ts
+        df['_meta_source_url'] = self.source_url
+        df['_meta_pipeline_version'] = self.pipeline_version
+        df['_meta_source_content_hash'] = df['raw_data_full'].apply(
+            lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest()
+        )
         return df
 
     def _generate_hash_id(self, df: pd.DataFrame, id_col_name: str) -> pd.DataFrame:
         """Generates a unique ID for each row by hashing its contents."""
-        # Ensure consistent dict ordering for hashing
+        # Use a subset of columns that define uniqueness, excluding the raw data itself
+        # to ensure the hash is stable even if raw_data_full format changes.
+        cols_to_hash = [col for col in df.columns if col not in ['raw_data_full'] and not col.startswith('_meta')]
+
+        def default_converter(o):
+            """Handle non-serializable types for JSON dumping."""
+            if pd.isna(o):
+                return None
+            return str(o) # Fallback to string representation
+
         df[id_col_name] = df.apply(
             lambda row: hashlib.sha256(
-                json.dumps(row.to_dict(), sort_keys=True).encode('utf-8')
+                json.dumps(
+                    row[cols_to_hash].to_dict(),
+                    sort_keys=True,
+                    default=default_converter
+                ).encode('utf-8')
             ).hexdigest(),
             axis=1
         )
@@ -149,94 +185,59 @@ class JaderTransformer:
 
     def transform(self, data_frames: dict) -> dict[str, pd.DataFrame]:
         """
-        Transforms the raw JADER data into a dictionary of analysis-ready DataFrames.
+        Transforms the four raw JADER DataFrames.
+
+        Args:
+            data_frames: A dictionary of raw DataFrames from the JaderParser.
+
         Returns:
-            A dictionary of DataFrames for 'jader_case', 'jader_drug', 'jader_reaction'.
+            A dictionary of transformed DataFrames ready for loading.
         """
-        case_df = data_frames.get("case")
-        demo_df = data_frames.get("demo")
-        drug_df = data_frames.get("drug")
-        reac_df = data_frames.get("reac")
+        transformed_dfs = {}
 
-        if any(df is None for df in [case_df, demo_df, drug_df, reac_df]):
-            raise ValueError("One or more required JADER dataframes are missing.")
+        for table_name, df_raw in data_frames.items():
+            if df_raw is None or df_raw.empty:
+                print(f"No data for '{table_name}', skipping transformation.")
+                transformed_dfs[table_name] = pd.DataFrame()
+                continue
 
-        # --- 1. Rename all columns first for consistency ---
-        case_df_orig = case_df.copy()
-        demo_df_orig = demo_df.copy()
-        drug_df_orig = drug_df.copy()
-        reac_df_orig = reac_df.copy()
+            print(f"Transforming data for '{table_name}'...")
+            df = df_raw.copy()
 
-        case_df = self._rename_columns(case_df.copy())
-        demo_df = self._rename_columns(demo_df.copy())
-        drug_df = self._rename_columns(drug_df.copy())
-        reac_df = self._rename_columns(reac_df.copy())
+            # 1. Create the raw_data_full column for high-fidelity audit trails
+            df['raw_data_full'] = df.to_json(orient='records', lines=True, force_ascii=False).splitlines()
 
-        # --- 2. Transform `jader_drug` table ---
-        drug_cols_to_select = [
-            'case_id', 'drug_involvement', 'drug_generic_name',
-            'drug_brand_name', 'drug_usage_reason'
-        ]
-        existing_drug_cols = [col for col in drug_cols_to_select if col in drug_df.columns]
-        drug_df_transformed = drug_df[existing_drug_cols]
-        drug_df_transformed = self._generate_hash_id(drug_df_transformed, 'drug_id')
+            # 2. Rename columns from Japanese to standard English names
+            rename_map = self.COLUMN_MAPS.get(table_name, {})
+            df.rename(columns=rename_map, inplace=True)
 
-        # --- 3. Transform `jader_reaction` table ---
-        reac_cols_to_select = [
-            'case_id', 'reaction_event_name', 'reaction_outcome', 'reaction_onset_date'
-        ]
-        existing_reac_cols = [col for col in reac_cols_to_select if col in reac_df.columns]
-        reac_df_transformed = reac_df[existing_reac_cols]
+            # Drop original columns that were not in the rename map, except the primary key
+            schema_cols = list(rename_map.values())
+            if 'identification_number' not in schema_cols:
+                 schema_cols.append('identification_number')
 
-        if 'reaction_onset_date' in reac_df_transformed.columns:
-            reac_df_transformed['reaction_onset_date'] = utils.to_iso_date(reac_df_transformed['reaction_onset_date'])
-        reac_df_transformed = self._generate_hash_id(reac_df_transformed, 'reaction_id')
+            df = df[schema_cols + ['raw_data_full']]
 
-        # --- 4. Transform `jader_case` table ---
-        case_df_transformed = pd.merge(case_df, demo_df, on='case_id', how='left')
 
-        # Create the `raw_data_full` JSONB column for auditability
-        raw_data = {}
-        for case_id in case_df['case_id'].unique():
-            raw_data[case_id] = {
-                "source_case": case_df_orig[case_df_orig['識別番号'] == case_id].to_dict(orient='records'),
-                "source_demo": demo_df_orig[demo_df_orig['識別番号'] == case_id].to_dict(orient='records'),
-                "source_drugs": drug_df_orig[drug_df_orig['識別番号'] == case_id].to_dict(orient='records'),
-                "source_reactions": reac_df_orig[reac_df_orig['識別番号'] == case_id].to_dict(orient='records'),
-            }
+            # 3. Handle special data transformations
+            if table_name == 'jader_reac' and 'onset_date' in df.columns:
+                df['onset_date'] = utils.to_iso_date(df['onset_date'])
 
-        case_df_transformed['raw_data_full'] = case_df_transformed['case_id'].map(
-            lambda cid: json.dumps(raw_data.get(cid), ensure_ascii=False) if raw_data.get(cid) else None
-        )
+            # 4. Generate a unique hash ID for tables that need it
+            if table_name in self.ID_COLUMNS:
+                id_col = self.ID_COLUMNS[table_name]
+                df = self._generate_hash_id(df, id_col)
 
-        # Add metadata
-        load_ts = datetime.now(timezone.utc)
-        case_df_transformed['_meta_load_ts_utc'] = load_ts
-        case_df_transformed['_meta_source_url'] = self.source_url
-        case_df_transformed['_meta_pipeline_version'] = self.pipeline_version
-        case_df_transformed['_meta_source_content_hash'] = case_df_transformed['raw_data_full'].apply(
-            lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest() if pd.notna(x) else None
-        )
+            # 5. Add standard metadata columns
+            df = self._add_metadata(df)
 
-        # Select final columns
-        case_cols = [
-            'case_id', 'report_count', 'gender', 'age', 'weight', 'height',
-            'report_fiscal_quarter', 'status', 'report_type', 'reporter_qualification',
-            'raw_data_full', '_meta_load_ts_utc', '_meta_source_url',
-            '_meta_pipeline_version', '_meta_source_content_hash'
-        ]
-        # Ensure all columns are present, adding missing ones as None
-        for col in case_cols:
-            if col not in case_df_transformed:
-                case_df_transformed[col] = None
+            # 6. Ensure final DataFrame has all columns from the schema, even if empty
+            # This would be where you might cross-reference the schema definition
+            # from schemas.py, but for now, we rely on the rename map.
 
-        case_df_transformed = case_df_transformed[case_cols]
+            transformed_dfs[table_name] = df
 
-        return {
-            "jader_case": case_df_transformed,
-            "jader_drug": drug_df_transformed,
-            "jader_reaction": reac_df_transformed
-        }
+        return transformed_dfs
 
 
 class PackageInsertsTransformer:

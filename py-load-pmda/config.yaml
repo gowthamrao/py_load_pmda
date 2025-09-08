@@ -34,9 +34,16 @@ datasets:
     extractor: "JaderExtractor"
     parser: "JaderParser"
     transformer: "JaderTransformer"
-    table_name: "pmda_jader"
     schema_name: "public"
     load_mode: "append"
+    # The JADER dataset is normalized into four tables.
+    # The transformer will produce a dictionary of DataFrames,
+    # where the keys match these table names.
+    tables:
+      - "jader_demo"
+      - "jader_drug"
+      - "jader_reac"
+      - "jader_hist"
 
   package_inserts:
     extractor: "PackageInsertsExtractor"
