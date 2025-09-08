@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from importlib.metadata import version
 import pandas as pd
 import psycopg2
+from psycopg2 import sql
 from py_load_pmda.interfaces import LoaderInterface
 
 
@@ -154,10 +155,73 @@ class PostgreSQLAdapter(LoaderInterface):
         self, staging_table: str, target_table: str, primary_keys: list[str], schema: str
     ) -> None:
         """
-        Execute a MERGE (Upsert) operation in PostgreSQL.
+        Execute a MERGE (Upsert) operation from a staging table to a target
+        table using PostgreSQL's 'INSERT ... ON CONFLICT' statement.
+
+        Args:
+            staging_table: The name of the table with the new data.
+            target_table: The name of the table to merge into.
+            primary_keys: A list of column names that form the primary key
+                          or a unique constraint for conflict detection.
+            schema: The database schema for the tables.
         """
-        print(f"Merging data from {staging_table} to {target_table}...")
-        pass
+        if not self.conn:
+            raise ConnectionError("Not connected. Call connect() first.")
+        if not primary_keys:
+            raise ValueError("primary_keys must be provided for a merge operation.")
+
+        print(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
+
+        with self.conn.cursor() as cursor:
+            try:
+                # Safely query for column names using parameter substitution for values
+                query = sql.SQL("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = %s AND table_name = %s;
+                """)
+                cursor.execute(query, (schema, staging_table))
+                table_cols = [row[0] for row in cursor.fetchall()]
+
+                if not table_cols:
+                    print(f"Warning: Staging table '{schema}.{staging_table}' is empty or does not exist. Skipping merge.")
+                    return
+
+                update_cols = [col for col in table_cols if col not in primary_keys]
+
+                if not update_cols:
+                    print("Warning: No columns to update (all columns are primary keys). Skipping merge.")
+                    return
+
+                # Safely construct the query using psycopg2.sql objects
+                update_cols_sql = sql.SQL(', ').join(
+                    sql.SQL("{col} = EXCLUDED.{col}").format(col=sql.Identifier(col))
+                    for col in update_cols
+                )
+
+                merge_sql = sql.SQL("""
+                    INSERT INTO {target} ({cols})
+                    SELECT {cols} FROM {staging}
+                    ON CONFLICT ({pks}) DO UPDATE
+                    SET {update_clause};
+                """).format(
+                    target=sql.Identifier(schema, target_table),
+                    cols=sql.SQL(', ').join(map(sql.Identifier, table_cols)),
+                    staging=sql.Identifier(schema, staging_table),
+                    pks=sql.SQL(', ').join(map(sql.Identifier, primary_keys)),
+                    update_clause=update_cols_sql
+                )
+
+                print("Executing MERGE SQL...")
+                cursor.execute(merge_sql)
+                print(f"Successfully merged. {cursor.rowcount} rows affected.")
+
+                self.conn.commit()
+
+            except psycopg2.Error as e:
+                print(f"Error during merge operation: {e}")
+                self.conn.rollback()
+                raise
 
     def get_latest_state(self, dataset_id: str, schema: str = "public") -> dict:
         """
