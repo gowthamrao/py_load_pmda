@@ -45,22 +45,27 @@ class PostgreSQLAdapter(LoaderInterface):
             print(f"Error: Unable to connect to PostgreSQL database: {e}")
             raise ConnectionError("Failed to connect to PostgreSQL.") from e
 
+    def commit(self) -> None:
+        """Commits the current database transaction."""
+        if self.conn:
+            self.conn.commit()
+
+    def rollback(self) -> None:
+        """Rolls back the current database transaction."""
+        if self.conn:
+            self.conn.rollback()
+
+    def close(self) -> None:
+        """Closes the database connection."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+            print("PostgreSQL connection closed.")
+
     def ensure_schema(self, schema_definition: dict) -> None:
         """
         Ensure the target schema and tables exist in PostgreSQL.
-
-        Args:
-            schema_definition: A dictionary defining the schema and tables.
-                               Example:
-                               {
-                                   "schema_name": "my_schema",
-                                   "tables": {
-                                       "my_table": {
-                                           "columns": {"id": "INTEGER", "data": "TEXT"},
-                                           "primary_key": "id"
-                                       }
-                                   }
-                               }
+        This method does NOT commit the transaction.
         """
         if not self.conn:
             raise ConnectionError("Not connected to the database. Call connect() first.")
@@ -82,10 +87,7 @@ class PostgreSQLAdapter(LoaderInterface):
                     if not columns:
                         continue
 
-                    # Generate column definitions
                     col_defs = [f"{col_name} {col_type}" for col_name, col_type in columns.items()]
-
-                    # Add primary key constraint if specified
                     pk = table_def.get("primary_key")
                     if pk:
                         col_defs.append(f"PRIMARY KEY ({pk})")
@@ -96,8 +98,6 @@ class PostgreSQLAdapter(LoaderInterface):
                     );
                     """
                     cursor.execute(create_table_sql)
-
-                self.conn.commit()
                 print("Schema and tables verified successfully.")
             except psycopg2.Error as e:
                 print(f"Error during schema creation: {e}")
@@ -108,13 +108,8 @@ class PostgreSQLAdapter(LoaderInterface):
         self, data: pd.DataFrame, target_table: str, schema: str, mode: str = "append"
     ) -> None:
         """
-        Perform high-performance native bulk load of the data using COPY.
-
-        Args:
-            data: The pandas DataFrame to load.
-            target_table: The name of the target table.
-            schema: The name of the target schema.
-            mode: Load mode. 'append' or 'overwrite'.
+        Perform high-performance native bulk load using COPY.
+        This method does NOT commit the transaction.
         """
         if not self.conn:
             raise ConnectionError("Not connected to the database. Call connect() first.")
@@ -132,21 +127,13 @@ class PostgreSQLAdapter(LoaderInterface):
                     print(f"Overwriting table: executing `{truncate_sql}`")
                     cursor.execute(truncate_sql)
 
-                # Use an in-memory buffer to stream data
                 buffer = io.StringIO()
-                # Use tab as a separator, which is less likely to be in the data.
-                # Ensure no quotes are used and nulls are represented as empty strings.
                 data.to_csv(buffer, index=False, header=False, sep='\t', na_rep='')
                 buffer.seek(0)
-
                 copy_sql = f"COPY {schema}.{target_table} FROM STDIN WITH (FORMAT text, DELIMITER E'\\t', NULL '')"
-
                 print(f"Starting bulk load to '{schema}.{target_table}'...")
                 cursor.copy_expert(sql=copy_sql, file=buffer)
-
-                self.conn.commit()
                 print(f"Successfully loaded {len(data)} rows.")
-
             except (IOError, psycopg2.Error) as e:
                 print(f"Error during bulk load: {e}")
                 self.conn.rollback()
@@ -156,15 +143,8 @@ class PostgreSQLAdapter(LoaderInterface):
         self, staging_table: str, target_table: str, primary_keys: list[str], schema: str
     ) -> None:
         """
-        Execute a MERGE (Upsert) operation from a staging table to a target
-        table using PostgreSQL's 'INSERT ... ON CONFLICT' statement.
-
-        Args:
-            staging_table: The name of the table with the new data.
-            target_table: The name of the table to merge into.
-            primary_keys: A list of column names that form the primary key
-                          or a unique constraint for conflict detection.
-            schema: The database schema for the tables.
+        Execute a MERGE (Upsert) operation from a staging table.
+        This method does NOT commit the transaction.
         """
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
@@ -175,7 +155,6 @@ class PostgreSQLAdapter(LoaderInterface):
 
         with self.conn.cursor() as cursor:
             try:
-                # Safely query for column names using parameter substitution for values
                 query = sql.SQL("""
                     SELECT column_name
                     FROM information_schema.columns
@@ -189,17 +168,14 @@ class PostgreSQLAdapter(LoaderInterface):
                     return
 
                 update_cols = [col for col in table_cols if col not in primary_keys]
-
                 if not update_cols:
                     print("Warning: No columns to update (all columns are primary keys). Skipping merge.")
                     return
 
-                # Safely construct the query using psycopg2.sql objects
                 update_cols_sql = sql.SQL(', ').join(
                     sql.SQL("{col} = EXCLUDED.{col}").format(col=sql.Identifier(col))
                     for col in update_cols
                 )
-
                 merge_sql = sql.SQL("""
                     INSERT INTO {target} ({cols})
                     SELECT {cols} FROM {staging}
@@ -212,13 +188,9 @@ class PostgreSQLAdapter(LoaderInterface):
                     pks=sql.SQL(', ').join(map(sql.Identifier, primary_keys)),
                     update_clause=update_cols_sql
                 )
-
                 print("Executing MERGE SQL...")
                 cursor.execute(merge_sql)
                 print(f"Successfully merged. {cursor.rowcount} rows affected.")
-
-                self.conn.commit()
-
             except psycopg2.Error as e:
                 print(f"Error during merge operation: {e}")
                 self.conn.rollback()
@@ -227,13 +199,13 @@ class PostgreSQLAdapter(LoaderInterface):
     def get_latest_state(self, dataset_id: str, schema: str) -> dict:
         """
         Retrieve the latest ingestion state for a dataset from PostgreSQL.
-        The state is assumed to be in a table named 'ingestion_state'.
         """
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
 
-        query = f"SELECT last_watermark FROM {schema}.ingestion_state WHERE dataset_id = %s;"
-
+        query = sql.SQL("SELECT last_watermark FROM {schema}.ingestion_state WHERE dataset_id = %s;").format(
+            schema=sql.Identifier(schema)
+        )
         with self.conn.cursor() as cursor:
             cursor.execute(query, (dataset_id,))
             result = cursor.fetchone()
@@ -243,7 +215,8 @@ class PostgreSQLAdapter(LoaderInterface):
 
     def update_state(self, dataset_id: str, state: dict, status: str, schema: str) -> None:
         """
-        Transactionally update the ingestion state after a load in PostgreSQL.
+        Update the ingestion state for a dataset.
+        This method does NOT commit the transaction.
         """
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
@@ -251,8 +224,9 @@ class PostgreSQLAdapter(LoaderInterface):
         pipeline_version = version("py-load-pmda")
         now = datetime.now(timezone.utc)
         last_watermark = json.dumps(state)
+        last_successful_ts = now if status == 'SUCCESS' else None
 
-        update_sql = f"""
+        update_sql = sql.SQL("""
         INSERT INTO {schema}.ingestion_state (
             dataset_id, last_run_ts_utc, last_successful_run_ts_utc,
             status, last_watermark, pipeline_version
@@ -267,16 +241,13 @@ class PostgreSQLAdapter(LoaderInterface):
             status = EXCLUDED.status,
             last_watermark = EXCLUDED.last_watermark,
             pipeline_version = EXCLUDED.pipeline_version;
-        """
-
-        last_successful_ts = now if status == 'SUCCESS' else None
+        """).format(schema=sql.Identifier(schema))
 
         with self.conn.cursor() as cursor:
             try:
                 cursor.execute(update_sql, (
                     dataset_id, now, last_successful_ts, status, last_watermark, pipeline_version
                 ))
-                self.conn.commit()
                 print(f"State for dataset '{dataset_id}' updated with status '{status}'.")
             except psycopg2.Error as e:
                 print(f"Error updating state for dataset '{dataset_id}': {e}")
@@ -288,9 +259,22 @@ class PostgreSQLAdapter(LoaderInterface):
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
 
-        query = f"SELECT * FROM {schema}.ingestion_state ORDER BY dataset_id;"
-
+        query = sql.SQL("SELECT * FROM {schema}.ingestion_state ORDER BY dataset_id;").format(
+            schema=sql.Identifier(schema)
+        )
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute(query)
             results = cursor.fetchall()
             return [dict(row) for row in results]
+
+    def execute_sql(self, query: str, params: tuple = None) -> None:
+        """Executes an arbitrary SQL command."""
+        if not self.conn:
+            raise ConnectionError("Not connected. Call connect() first.")
+        with self.conn.cursor() as cursor:
+            try:
+                cursor.execute(query, params)
+            except psycopg2.Error as e:
+                print(f"Error executing custom SQL: {e}")
+                self.conn.rollback()
+                raise

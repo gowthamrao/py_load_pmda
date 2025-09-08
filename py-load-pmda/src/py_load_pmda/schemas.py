@@ -48,16 +48,42 @@ PMDA_APPROVALS_SCHEMA = {
     }
 }
 
-# Placeholder schema for the JADER dataset
+# Schema for the JADER (Japanese Adverse Drug Event Report) data
 PMDA_JADER_SCHEMA = {
     "schema_name": "public",
     "tables": {
         "pmda_jader": {
             "columns": {
-                "case_id": "VARCHAR(100) NOT NULL",
-                # ... more columns to be defined ...
+                # Case and Patient Info
+                "case_id": "VARCHAR(50) NOT NULL",
+                "report_count": "INTEGER",
+                "gender": "VARCHAR(10)",
+                "age": "VARCHAR(20)",
+                "weight": "VARCHAR(20)",
+                "height": "VARCHAR(20)",
+                "report_fiscal_quarter": "VARCHAR(20)",
+                "status": "TEXT",
+                "report_type": "TEXT",
+                "reporter_qualification": "TEXT",
+                # Drug Info
+                "drug_involvement": "TEXT",
+                "drug_generic_name": "TEXT NOT NULL",
+                "drug_brand_name": "TEXT",
+                "drug_usage_reason": "TEXT",
+                # Reaction Info
+                "reaction_event_name": "TEXT NOT NULL",
+                "reaction_outcome": "TEXT",
+                "reaction_onset_date": "DATE",
+                # Metadata
+                "raw_data_full": "JSONB",
+                "_meta_load_ts_utc": "TIMESTAMPTZ",
+                "_meta_source_url": "TEXT",
+                "_meta_pipeline_version": "VARCHAR(50)",
+                "_meta_source_content_hash": "VARCHAR(64)",
             },
-            "primary_key": "case_id",
+            # A single case can have multiple drugs and multiple reactions,
+            # so we need a composite primary key to uniquely identify a row.
+            "primary_key": "case_id, drug_generic_name, reaction_event_name",
         }
     }
 }

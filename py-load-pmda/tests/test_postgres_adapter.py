@@ -94,7 +94,7 @@ def test_ensure_schema(adapter, mocker):
     assert "name TEXT" in create_table_call
     assert "PRIMARY KEY (id)" in create_table_call
 
-    adapter.conn.commit.assert_called_once()
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_append(adapter, mocker):
     """Tests bulk_load in 'append' mode."""
@@ -107,7 +107,7 @@ def test_bulk_load_append(adapter, mocker):
     assert not any("TRUNCATE" in call[0][0] for call in mock_cursor.execute.call_args_list)
 
     mock_cursor.copy_expert.assert_called_once()
-    adapter.conn.commit.assert_called_once()
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_overwrite(adapter, mocker):
     """Tests bulk_load in 'overwrite' mode."""
@@ -120,7 +120,7 @@ def test_bulk_load_overwrite(adapter, mocker):
     mock_cursor.execute.assert_called_once_with("TRUNCATE TABLE my_schema.my_table RESTART IDENTITY;")
 
     mock_cursor.copy_expert.assert_called_once()
-    adapter.conn.commit.assert_called_once()
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_empty_df(adapter):
     """Tests that bulk_load exits gracefully for an empty DataFrame."""
@@ -135,7 +135,7 @@ def test_get_latest_state_found(adapter, mocker):
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
     mock_cursor.fetchone.return_value = ({"last_run": "2025-01-01"},)
 
-    state = adapter.get_latest_state("my_dataset")
+    state = adapter.get_latest_state("my_dataset", schema="public")
 
     mock_cursor.execute.assert_called_once_with(mocker.ANY, ("my_dataset",))
     assert state == {"last_run": "2025-01-01"}
@@ -145,7 +145,7 @@ def test_get_latest_state_not_found(adapter):
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
     mock_cursor.fetchone.return_value = None
 
-    state = adapter.get_latest_state("my_dataset")
+    state = adapter.get_latest_state("my_dataset", schema="public")
 
     assert state == {}
 
@@ -155,25 +155,25 @@ def test_update_state_success(adapter, mocker):
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
 
     state_to_save = {"new_watermark": "abc"}
-    adapter.update_state("my_dataset", state_to_save, "SUCCESS")
+    adapter.update_state("my_dataset", state_to_save, "SUCCESS", schema="public")
 
     mock_cursor.execute.assert_called_once()
     # Check that last_successful_ts is not None
     args = mock_cursor.execute.call_args[0][1]
     assert args[2] is not None # last_successful_ts
     assert args[3] == "SUCCESS"
-    adapter.conn.commit.assert_called_once()
+    adapter.conn.commit.assert_not_called()
 
 def test_update_state_failure(adapter, mocker):
     """Tests updating a state with a FAILED status."""
     mocker.patch("py_load_pmda.adapters.postgres.version", return_value="0.1.0")
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
 
-    adapter.update_state("my_dataset", {}, "FAILED")
+    adapter.update_state("my_dataset", {}, "FAILED", schema="public")
 
     mock_cursor.execute.assert_called_once()
     # Check that last_successful_ts is None
     args = mock_cursor.execute.call_args[0][1]
     assert args[2] is None # last_successful_ts
     assert args[3] == "FAILED"
-    adapter.conn.commit.assert_called_once()
+    adapter.conn.commit.assert_not_called()

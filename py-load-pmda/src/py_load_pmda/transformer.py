@@ -174,9 +174,10 @@ class JaderTransformer:
 
         # --- 2. Create the Standard Representation ---
         # Merge the main dataframes. This can create many rows per case.
-        merged_df = case_df.merge(demo_df, on=['識別番号', '報告回数'], how='left')
-        merged_df = merged_df.merge(drug_df, on=['識別番号', '報告回数'], how='left')
-        merged_df = merged_df.merge(reac_df, on=['識別番号', '報告回数'], how='left')
+        # The DEMO, DRUG, and REAC files do not contain '報告回数', so we merge on '識別番号' only.
+        merged_df = case_df.merge(demo_df, on='識別番号', how='left')
+        merged_df = merged_df.merge(drug_df, on='識別番号', how='left')
+        merged_df = merged_df.merge(reac_df, on='識別番号', how='left')
 
         # --- 3. Clean and Standardize ---
         merged_df.rename(columns=self.rename_map, inplace=True)
