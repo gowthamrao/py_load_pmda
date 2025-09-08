@@ -28,6 +28,7 @@ packages = [{include = "py_load_pmda", from = "src"}]
 pytest = "^8.0.0"
 pytest-mock = "^3.12.0"
 typer = {extras = ["all"], version = "^0.17.4"}
+psycopg2-binary = ">=2.9.9,<3.0.0"
 
 
 [build-system]
