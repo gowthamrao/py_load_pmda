@@ -17,7 +17,7 @@ WAREKI_ERA_STARTS = {
 # It handles 元年 (first year) as well.
 WAREKI_PATTERN = re.compile(
     r"(?P<era>{eras})(?P<year>\d+|元)年"
-    r"(?P<month>\d{1,2})月(?P<day>\d{1,2})日".format(
+    r"(?P<month>\d{{1,2}})月(?P<day>\d{{1,2}})日".format(
         eras="|".join(WAREKI_ERA_STARTS.keys())
     )
 )

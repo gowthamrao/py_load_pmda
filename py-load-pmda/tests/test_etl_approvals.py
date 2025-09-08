@@ -63,11 +63,13 @@ def mock_pmda_pages(mocker):
 def test_approvals_extractor(mock_pmda_pages, tmp_path):
     """Tests the ApprovalsExtractor logic."""
     extractor = ApprovalsExtractor(cache_dir=str(tmp_path))
-    file_path, source_url = extractor.extract(year=2025)
+    file_path, source_url, new_state = extractor.extract(year=2025, last_state={})
 
     assert file_path.name == "000276012.xlsx"
     assert source_url == "https://www.pmda.go.jp/files/000276012.xlsx"
     assert file_path.read_bytes() == b"dummy excel content"
+    assert "etag" in new_state
+    assert new_state["etag"] == "test-etag"
 
 @pytest.fixture
 def sample_raw_df():

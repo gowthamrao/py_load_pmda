@@ -71,8 +71,8 @@ def test_execute_merge_constructs_correct_sql(adapter, mocker):
     # Compare the composed SQL objects. Direct comparison works on these objects.
     assert actual_sql == expected_sql
 
-    # 3. Verify that the transaction was committed
-    adapter.conn.commit.assert_called_once()
+    # 3. Verify that the transaction was NOT committed by this method
+    adapter.conn.commit.assert_not_called()
 
 def test_execute_merge_no_primary_keys_raises_error(adapter):
     """
