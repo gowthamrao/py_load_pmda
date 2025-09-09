@@ -93,7 +93,7 @@ def test_approvals_transformer(sample_raw_df):
     source_url = "https://www.pmda.go.jp/files/000276012.xlsx"
     transformer = ApprovalsTransformer(source_url=source_url)
 
-    transformed_df = transformer.transform(sample_raw_df)
+    transformed_df = transformer.transform([sample_raw_df])
 
     assert not transformed_df.empty
     assert 'brand_name_jp' in transformed_df.columns

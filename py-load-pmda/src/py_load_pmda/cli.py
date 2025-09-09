@@ -15,18 +15,21 @@ AVAILABLE_EXTRACTORS = {
     "ApprovalsExtractor": extractor.ApprovalsExtractor,
     "JaderExtractor": extractor.JaderExtractor,
     "PackageInsertsExtractor": extractor.PackageInsertsExtractor,
+    "ReviewReportsExtractor": extractor.ReviewReportsExtractor,
 }
 
 AVAILABLE_PARSERS = {
     "ApprovalsParser": parser.ApprovalsParser,
     "JaderParser": parser.JaderParser,
     "PackageInsertsParser": parser.PackageInsertsParser,
+    "ReviewReportsParser": parser.ReviewReportsParser,
 }
 
 AVAILABLE_TRANSFORMERS = {
     "ApprovalsTransformer": transformer.ApprovalsTransformer,
     "JaderTransformer": transformer.JaderTransformer,
     "PackageInsertsTransformer": transformer.PackageInsertsTransformer,
+    "ReviewReportsTransformer": transformer.ReviewReportsTransformer,
 }
 
 
@@ -76,8 +79,8 @@ def run(
     # Move argument validation to the top, before any connections are made.
     if dataset == "approvals" and not year:
         raise ValueError("The '--year' option is required for the 'approvals' dataset.")
-    if dataset == "package_inserts" and not drug_name:
-        raise ValueError("At least one '--drug-name' option is required for the 'package_inserts' dataset.")
+    if dataset in ["package_inserts", "review_reports"] and not drug_name:
+        raise ValueError(f"At least one '--drug-name' option is required for the '{dataset}' dataset.")
 
     adapter = None
     status = "FAILED"
@@ -120,7 +123,7 @@ def run(
         extract_args = {"last_state": last_state}
         if dataset == "approvals":
             extract_args['year'] = year
-        elif dataset == "package_inserts":
+        elif dataset in ["package_inserts", "review_reports"]:
             extract_args['drug_names'] = drug_name
 
         extracted_output = extractor_instance.extract(**extract_args)
@@ -135,19 +138,22 @@ def run(
             return
 
         # 8. Parse, Transform, and Load based on dataset type
-        if dataset == "package_inserts":
+        if dataset in ["package_inserts", "review_reports"]:
             downloaded_data, _ = extracted_output
 
             for file_path, source_url in downloaded_data:
                 print(f"\n--- Processing file: {file_path.name} from {source_url} ---")
                 parser_instance = parser_class()
-                raw_df = parser_instance.parse(file_path)
-                if raw_df.empty:
-                    print(f"Parser returned empty DataFrame for {file_path.name}. Skipping.")
+                parsed_output = parser_instance.parse(file_path)
+
+                # Parsers for these types now consistently return a list of DataFrames.
+                # The check for an empty list is sufficient.
+                if not parsed_output:
+                    print(f"Parser returned no data for {file_path.name}. Skipping.")
                     continue
 
                 transformer_instance = transformer_class(source_url=source_url)
-                transformed_df = transformer_instance.transform(raw_df)
+                transformed_df = transformer_instance.transform(parsed_output)
 
                 load_mode = mode or ds_config.get("load_mode", "merge")
                 table_name = ds_config["table_name"]

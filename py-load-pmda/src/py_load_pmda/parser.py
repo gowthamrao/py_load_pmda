@@ -9,15 +9,15 @@ class PackageInsertsParser:
     """
     Parses downloaded Package Insert PDF files using tabula-py.
     """
-    def parse(self, file_path: Path) -> pd.DataFrame:
+    def parse(self, file_path: Path) -> List[pd.DataFrame]:
         """
-        Parses the PDF file and returns a pandas DataFrame containing table data.
+        Parses the PDF file and returns a list of pandas DataFrames.
 
         Args:
             file_path: The path to the PDF file.
 
         Returns:
-            A DataFrame containing the concatenated table data from the PDF.
+            A list of DataFrames, where each DataFrame represents a table from the PDF.
         """
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
@@ -25,17 +25,14 @@ class PackageInsertsParser:
         print(f"Parsing PDF file: {file_path}")
         try:
             # Read all tables from all pages of the PDF
-            # This returns a list of DataFrames
             tables = tabula.read_pdf(file_path, pages="all", multiple_tables=True, lattice=True)
 
             if not tables:
                 print(f"Warning: No tables found in {file_path}.")
-                return pd.DataFrame()
+                return []
 
-            # Concatenate all found tables into a single DataFrame
-            full_df = pd.concat(tables, ignore_index=True)
-            print(f"Successfully extracted and concatenated {len(tables)} tables from PDF.")
-            return full_df
+            print(f"Successfully extracted {len(tables)} tables from PDF.")
+            return tables
 
         except Exception as e:
             # This can catch various errors, including Java not being installed,
@@ -60,15 +57,15 @@ class ApprovalsParser:
         raise ValueError(f"Could not find header row containing '{keyword}' within the first {search_limit} rows.")
 
 
-    def parse(self, file_path: Path) -> pd.DataFrame:
+    def parse(self, file_path: Path) -> List[pd.DataFrame]:
         """
-        Parses the Excel file and returns a pandas DataFrame.
+        Parses the Excel file and returns a list containing a single pandas DataFrame.
 
         Args:
             file_path: The path to the Excel file.
 
         Returns:
-            A DataFrame containing the raw data from the Excel file.
+            A list containing a single DataFrame with the raw data from the Excel file.
         """
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
@@ -96,7 +93,7 @@ class ApprovalsParser:
             df[ffill_cols] = df[ffill_cols].ffill()
 
             print("Successfully parsed Excel file into DataFrame.")
-            return df
+            return [df]
         except Exception as e:
             print(f"Error parsing Excel file {file_path}: {e}")
             raise
@@ -161,3 +158,40 @@ class JaderParser:
                     print(f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows.")
 
         return parsed_data
+
+
+class ReviewReportsParser:
+    """
+    Parses downloaded Review Report PDF files using tabula-py.
+    """
+    def parse(self, file_path: Path) -> List[pd.DataFrame]:
+        """
+        Parses the PDF file and returns a list of pandas DataFrames, one for each table.
+
+        Args:
+            file_path: The path to the PDF file.
+
+        Returns:
+            A list of DataFrames, where each DataFrame is a table found in the PDF.
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"The file {file_path} does not exist.")
+
+        print(f"Parsing PDF file: {file_path}")
+        try:
+            # Read all tables from all pages of the PDF.
+            # `multiple_tables=True` ensures that we get a list of DataFrames
+            # if multiple tables are on a single page.
+            tables = tabula.read_pdf(file_path, pages="all", multiple_tables=True, lattice=True)
+
+            if not tables:
+                print(f"Warning: No tables found in {file_path}.")
+                return []
+
+            print(f"Successfully extracted {len(tables)} tables from PDF.")
+            return tables
+
+        except Exception as e:
+            print(f"Error parsing PDF file {file_path}: {e}")
+            print("Please ensure you have Java installed and in your PATH for tabula-py to work.")
+            raise

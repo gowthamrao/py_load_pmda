@@ -61,3 +61,20 @@ datasets:
       _meta_load_ts_utc: "TIMESTAMPTZ"
       _meta_pipeline_version: "VARCHAR(50)"
       _meta_source_content_hash: "VARCHAR(64)"
+
+  review_reports:
+    extractor: "ReviewReportsExtractor"
+    parser: "ReviewReportsParser"
+    transformer: "ReviewReportsTransformer"
+    table_name: "pmda_review_reports"
+    schema_name: "public"
+    load_mode: "merge"
+    primary_key: ["document_id"]
+    columns:
+      document_id: "VARCHAR(64)"
+      raw_data_full: "JSONB"
+      _meta_source_url: "TEXT"
+      _meta_extraction_ts_utc: "TIMESTAMPTZ"
+      _meta_load_ts_utc: "TIMESTAMPTZ"
+      _meta_pipeline_version: "VARCHAR(50)"
+      _meta_source_content_hash: "VARCHAR(64)"
