@@ -1,6 +1,7 @@
 import json
 import logging
 from logging import Formatter, LogRecord
+from typing import IO, Optional
 
 
 class JSONFormatter(Formatter):
@@ -11,12 +12,6 @@ class JSONFormatter(Formatter):
     def format(self, record: LogRecord) -> str:
         """
         Formats a log record into a JSON string.
-
-        Args:
-            record: The log record to format.
-
-        Returns:
-            A JSON string representing the log record.
         """
         log_object = {
             "timestamp": self.formatTime(record, self.datefmt),
@@ -32,29 +27,43 @@ class JSONFormatter(Formatter):
         return json.dumps(log_object)
 
 
-def setup_logging(level: str = "INFO") -> None:
+def setup_logging(
+    level: str = "INFO",
+    log_format: str = "text",
+    stream: Optional[IO[str]] = None,
+    force: bool = False,
+) -> None:
     """
     Configures the root logger for the application.
-
-    This function sets up a handler that outputs logs to the console,
-    using the custom JSONFormatter. The log level is configurable.
+    This function is safe to call multiple times; it will not add duplicate handlers.
 
     Args:
-        level: The minimum logging level to output (e.g., "INFO", "DEBUG").
+        level: The minimum logging level to output.
+        log_format: The format for logs ('text' or 'json').
+        stream: The stream to log to. Defaults to sys.stdout.
+        force: If True, will clear existing handlers and re-configure.
+               Useful for testing.
     """
-    log_level = getattr(logging, level.upper(), logging.INFO)
-
-    # Get the root logger
     logger = logging.getLogger()
-    logger.setLevel(log_level)
 
-    # Create a handler to write to stdout
-    handler = logging.StreamHandler()
-    handler.setLevel(log_level)
+    if logger.hasHandlers() and not force:
+        logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+        return
 
-    # Create and set the custom JSON formatter
-    formatter = JSONFormatter()
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    logger.setLevel(getattr(logging, level.upper(), logging.INFO))
+    handler = logging.StreamHandler(stream)
+    handler.setLevel(getattr(logging, level.upper(), logging.INFO))
+
+    if log_format.lower() == "json":
+        formatter = JSONFormatter()
+    else:
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
     handler.setFormatter(formatter)
-
-    # Add the handler to the root logger
     logger.addHandler(handler)

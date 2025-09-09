@@ -55,7 +55,11 @@ def init_db() -> None:
     Initialize the database by creating the core schema and state tables.
     """
     config = load_config()
-    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+    logging_config = config.get("logging", {})
+    setup_logging(
+        level=logging_config.get("level", "INFO"),
+        log_format=logging_config.get("format", "text"),
+    )
 
     logging.info("Initializing database...")
     adapter = None
@@ -104,7 +108,11 @@ def run(
     try:
         # 1. Load Configuration and Setup Logging
         config = load_config()
-        setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+        logging_config = config.get("logging", {})
+        setup_logging(
+            level=logging_config.get("level", "INFO"),
+            log_format=logging_config.get("format", "text"),
+        )
         logging.info(f"Starting ETL run for dataset '{dataset}'.")
 
         db_config = config.get("database", {})
@@ -295,7 +303,11 @@ def status() -> None:
     Check the status of the last runs from the ingestion_state table.
     """
     config = load_config()
-    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+    logging_config = config.get("logging", {})
+    setup_logging(
+        level=logging_config.get("level", "INFO"),
+        log_format=logging_config.get("format", "text"),
+    )
 
     logging.info("--- Ingestion Status ---")
     adapter = None
@@ -331,7 +343,11 @@ def check_config() -> None:
     Validate configuration and database connectivity.
     """
     config = load_config()
-    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+    logging_config = config.get("logging", {})
+    setup_logging(
+        level=logging_config.get("level", "INFO"),
+        log_format=logging_config.get("format", "text"),
+    )
 
     logging.info("Checking configuration...")
     adapter = None
