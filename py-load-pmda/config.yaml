@@ -10,10 +10,11 @@ logging:
   level: "INFO"
 
 database:
-  # The type of database adapter to use. 'postgres' is the default.
+  # The type of database adapter to use.
+  # Options: "postgres", "redshift", "bigquery"
   type: "postgres"
 
-  # Connection details for the target database.
+  # --- Connection details for PostgreSQL / Redshift ---
   # These settings can be overridden by environment variables.
   # For local development, create a `.env` file in the project root and add:
   # PMDA_DB_HOST=localhost
@@ -28,6 +29,11 @@ database:
   port: 5432
   user: "admin"
   dbname: "pmda_db"
+
+  # --- Connection details for BigQuery ---
+  # project: "your-gcp-project-id"
+  # gcs_bucket: "your-gcs-bucket-for-staging"
+  # location: "US" # Optional: The location for your BigQuery datasets (e.g., "US", "EU")
 
 datasets:
   approvals:
