@@ -51,3 +51,19 @@ def test_load_config_file_not_found():
     """
     with pytest.raises(FileNotFoundError):
         load_config(path="/non/existent/path/config.yaml")
+
+def test_load_password_from_env_only(temp_config_file: Path, monkeypatch):
+    """
+    Tests that the password can be loaded from an environment variable even
+    if it is not present in the config file at all. This validates the
+    secure configuration approach.
+    """
+    # The temp_config_file fixture does not contain a 'password' key.
+    # We set it only in the environment.
+    monkeypatch.setenv("PMDA_DB_PASSWORD", "supersecret")
+
+    config = load_config(path=str(temp_config_file))
+
+    # The 'password' key should now exist in the config dictionary.
+    assert "password" in config["database"]
+    assert config["database"]["password"] == "supersecret"

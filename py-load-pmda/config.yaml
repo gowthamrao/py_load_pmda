@@ -8,11 +8,19 @@ database:
   type: "postgres"
 
   # Connection details for the target database.
-  # These can be overridden by env vars like PMDA_DB_HOST, PMDA_DB_USER, etc.
+  # These settings can be overridden by environment variables.
+  # For local development, create a `.env` file in the project root and add:
+  # PMDA_DB_HOST=localhost
+  # PMDA_DB_PORT=5432
+  # PMDA_DB_USER=your_user
+  # PMDA_DB_PASSWORD=your_password
+  # PMDA_DB_DBNAME=pmda_db
+  #
+  # The password is intentionally omitted from this file for security.
+  # It MUST be provided via the PMDA_DB_PASSWORD environment variable.
   host: "localhost"
   port: 5432
   user: "admin"
-  password: "password"
   dbname: "pmda_db"
 
 datasets:
