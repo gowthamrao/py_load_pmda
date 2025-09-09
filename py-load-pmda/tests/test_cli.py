@@ -131,9 +131,7 @@ def test_run_package_inserts_missing_drug_name(mocker: Any) -> None:
             "package_inserts": {}
         }
     })
-    result = runner.invoke(app, ["run", "--dataset", "package_inserts"], catch_exceptions=True)
+    result = runner.invoke(app, ["run", "--dataset", "package_inserts"])
 
     assert result.exit_code == 1
-    assert result.exc_info is not None
-    assert isinstance(result.exc_info[1], ValueError)
-    assert "At least one '--drug-name' option is required" in str(result.exc_info[1])
+    assert "Error: At least one '--drug-name' option is required" in result.output
