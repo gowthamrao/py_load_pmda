@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, cast
@@ -62,7 +63,7 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
 
                 # Don't print the password value
                 print_val = "****" if key == "password" else env_value
-                print(f"Overriding config '{key}' with value from environment variable {env_var}: {print_val}")
+                logging.info(f"Overriding config '{key}' with value from environment variable {env_var}: {print_val}")
 
 
                 # Attempt to cast env var to the same type as the default value
@@ -76,4 +77,13 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
                         config["database"][key] = env_value
                 except (ValueError, TypeError):
                     config["database"][key] = env_value
+
+    # Handle logging configuration
+    log_level_env = os.getenv("PMDA_LOG_LEVEL")
+    if log_level_env:
+        logging.info(f"Overriding log level with PMDA_LOG_LEVEL: {log_level_env}")
+        if "logging" not in config:
+            config["logging"] = {}
+        config["logging"]["level"] = log_level_env.upper()
+
     return config

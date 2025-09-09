@@ -7,30 +7,30 @@ from typer.testing import CliRunner
 
 runner = CliRunner()
 
-def test_init_db_success(mocker: Any) -> None:
+def test_init_db_success(mocker: Any, caplog: Any) -> None:
     """
     Tests that the 'init-db' command succeeds and calls the correct methods.
     """
     # Mock the dependencies of the CLI command
-    mock_load_config = mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}})
+    mock_load_config = mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
     mock_adapter_class = mocker.patch("py_load_pmda.cli.PostgreSQLAdapter")
     mock_adapter_instance = mock_adapter_class.return_value
 
     result = runner.invoke(app, ["init-db"])
 
     assert result.exit_code == 0
-    assert "Database initialization complete" in result.stdout
+    assert "Database initialization complete" in caplog.text
 
     # Verify that the dependencies were used as expected
     mock_load_config.assert_called_once()
     mock_adapter_instance.connect.assert_called_once_with({})
     mock_adapter_instance.ensure_schema.assert_called_once()
 
-def test_init_db_connection_error(mocker: Any) -> None:
+def test_init_db_connection_error(mocker: Any, caplog: Any) -> None:
     """
     Tests that 'init-db' command fails gracefully on ConnectionError.
     """
-    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}})
+    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
     mock_adapter_class = mocker.patch("py_load_pmda.cli.PostgreSQLAdapter")
     mock_adapter_instance = mock_adapter_class.return_value
 
@@ -40,11 +40,11 @@ def test_init_db_connection_error(mocker: Any) -> None:
     result = runner.invoke(app, ["init-db"])
 
     assert result.exit_code == 1
-    assert "Database initialization failed" in result.stdout
-    assert "Test connection error" in result.stdout
+    assert "Database initialization failed" in caplog.text
+    assert "Test connection error" in caplog.text
 
 
-def test_run_package_inserts_success(mocker: Any) -> None:
+def test_run_package_inserts_success(mocker: Any, caplog: Any) -> None:
     """
     Tests the 'run' command for the 'package_inserts' dataset.
     This test verifies that the CLI correctly parses arguments and orchestrates
@@ -52,6 +52,7 @@ def test_run_package_inserts_success(mocker: Any) -> None:
     """
     # 1. Mock all external dependencies of the 'run' command
     mocker.patch("py_load_pmda.cli.load_config", return_value={
+        "logging": {"level": "INFO"},
         "database": {"type": "postgres"},
         "datasets": {
             "package_inserts": {
@@ -107,7 +108,7 @@ def test_run_package_inserts_success(mocker: Any) -> None:
 
     # 4. Assert the outcome
     assert result.exit_code == 0
-    assert "ETL run for dataset 'package_inserts' completed successfully" in result.stdout
+    assert "ETL run for dataset 'package_inserts' completed successfully" in caplog.text
 
     # Assert that the extractor was called with the drug names from the CLI
     mock_extractor.extract.assert_called_once()

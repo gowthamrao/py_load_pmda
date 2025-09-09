@@ -3,6 +3,12 @@
 # This file contains settings for the database connection and for each
 # dataset to be processed. Settings can be overridden by environment variables.
 
+logging:
+  # The logging level for the application.
+  # Can be overridden by the PMDA_LOG_LEVEL environment variable.
+  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
 database:
   # The type of database adapter to use. 'postgres' is the default.
   type: "postgres"

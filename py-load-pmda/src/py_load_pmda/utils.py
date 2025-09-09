@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import date
 from typing import Any
@@ -69,8 +70,8 @@ def detect_encoding(data: bytes, fallback: str = 'utf-8') -> str:
     confidence = result.get('confidence', 0)
 
     if confidence < 0.7 or not encoding:
-        print(f"Encoding detection uncertain (confidence: {confidence:.2f}). Falling back to '{fallback}'.")
+        logging.warning(f"Encoding detection uncertain (confidence: {confidence:.2f}). Falling back to '{fallback}'.")
         return fallback
 
-    print(f"Detected encoding: '{encoding}' with {confidence:.2f} confidence.")
+    logging.debug(f"Detected encoding: '{encoding}' with {confidence:.2f} confidence.")
     return encoding

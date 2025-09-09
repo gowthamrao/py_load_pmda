@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from datetime import datetime, timezone
 from importlib.metadata import version
 from typing import Any, Dict, List, Optional, Tuple, cast
@@ -43,9 +44,9 @@ class PostgreSQLAdapter(LoaderInterface):
             connect_params.pop("type", None)
 
             self.conn = psycopg2.connect(**connect_params)
-            print("Successfully connected to PostgreSQL.")
+            logging.info("Successfully connected to PostgreSQL.")
         except psycopg2.Error as e:
-            print(f"Error: Unable to connect to PostgreSQL database: {e}")
+            logging.error(f"Error: Unable to connect to PostgreSQL database: {e}")
             raise ConnectionError("Failed to connect to PostgreSQL.") from e
 
     def commit(self) -> None:
@@ -63,7 +64,7 @@ class PostgreSQLAdapter(LoaderInterface):
         if self.conn:
             self.conn.close()
             self.conn = None
-            print("PostgreSQL connection closed.")
+            logging.info("PostgreSQL connection closed.")
 
     def ensure_schema(self, schema_definition: Dict[str, Any]) -> None:
         """
@@ -81,11 +82,11 @@ class PostgreSQLAdapter(LoaderInterface):
 
         with self.conn.cursor() as cursor:
             try:
-                print(f"Ensuring schema '{schema_name}' exists...")
+                logging.info(f"Ensuring schema '{schema_name}' exists...")
                 cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name};")
 
                 for table_name, table_def in tables.items():
-                    print(f"Ensuring table '{schema_name}.{table_name}' exists...")
+                    logging.info(f"Ensuring table '{schema_name}.{table_name}' exists...")
                     columns = table_def.get("columns", {})
                     if not columns:
                         continue
@@ -101,9 +102,9 @@ class PostgreSQLAdapter(LoaderInterface):
                     );
                     """
                     cursor.execute(create_table_sql)
-                print("Schema and tables verified successfully.")
+                logging.info("Schema and tables verified successfully.")
             except psycopg2.Error as e:
-                print(f"Error during schema creation: {e}")
+                logging.error(f"Error during schema creation: {e}")
                 self.conn.rollback()
                 raise
 
@@ -117,7 +118,7 @@ class PostgreSQLAdapter(LoaderInterface):
         if not self.conn:
             raise ConnectionError("Not connected to the database. Call connect() first.")
         if data.empty:
-            print("DataFrame is empty, skipping bulk load.")
+            logging.info("DataFrame is empty, skipping bulk load.")
             return
 
         if mode not in ["append", "overwrite"]:
@@ -127,18 +128,18 @@ class PostgreSQLAdapter(LoaderInterface):
             try:
                 if mode == "overwrite":
                     truncate_sql = f"TRUNCATE TABLE {schema}.{target_table} RESTART IDENTITY;"
-                    print(f"Overwriting table: executing `{truncate_sql}`")
+                    logging.info(f"Overwriting table: executing `{truncate_sql}`")
                     cursor.execute(truncate_sql)
 
                 buffer = io.StringIO()
                 data.to_csv(buffer, index=False, header=False, sep='\t', na_rep='')
                 buffer.seek(0)
                 copy_sql = f"COPY {schema}.{target_table} FROM STDIN WITH (FORMAT text, DELIMITER E'\\t', NULL '')"
-                print(f"Starting bulk load to '{schema}.{target_table}'...")
+                logging.info(f"Starting bulk load to '{schema}.{target_table}'...")
                 cursor.copy_expert(sql=copy_sql, file=buffer)
-                print(f"Successfully loaded {len(data)} rows.")
+                logging.info(f"Successfully loaded {len(data)} rows.")
             except (IOError, psycopg2.Error) as e:
-                print(f"Error during bulk load: {e}")
+                logging.error(f"Error during bulk load: {e}")
                 self.conn.rollback()
                 raise
 
@@ -154,7 +155,7 @@ class PostgreSQLAdapter(LoaderInterface):
         if not primary_keys:
             raise ValueError("primary_keys must be provided for a merge operation.")
 
-        print(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
+        logging.info(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
 
         with self.conn.cursor() as cursor:
             try:
@@ -167,12 +168,12 @@ class PostgreSQLAdapter(LoaderInterface):
                 table_cols = [row[0] for row in cursor.fetchall()]
 
                 if not table_cols:
-                    print(f"Warning: Staging table '{schema}.{staging_table}' is empty or does not exist. Skipping merge.")
+                    logging.warning(f"Warning: Staging table '{schema}.{staging_table}' is empty or does not exist. Skipping merge.")
                     return
 
                 update_cols = [col for col in table_cols if col not in primary_keys]
                 if not update_cols:
-                    print("Warning: No columns to update (all columns are primary keys). Skipping merge.")
+                    logging.warning("Warning: No columns to update (all columns are primary keys). Skipping merge.")
                     return
 
                 update_cols_sql = sql.SQL(', ').join(
@@ -191,11 +192,11 @@ class PostgreSQLAdapter(LoaderInterface):
                     pks=sql.SQL(', ').join(map(sql.Identifier, primary_keys)),
                     update_clause=update_cols_sql
                 )
-                print("Executing MERGE SQL...")
+                logging.info("Executing MERGE SQL...")
                 cursor.execute(merge_sql)
-                print(f"Successfully merged. {cursor.rowcount} rows affected.")
+                logging.info(f"Successfully merged. {cursor.rowcount} rows affected.")
             except psycopg2.Error as e:
-                print(f"Error during merge operation: {e}")
+                logging.error(f"Error during merge operation: {e}")
                 self.conn.rollback()
                 raise
 
@@ -251,9 +252,9 @@ class PostgreSQLAdapter(LoaderInterface):
                 cursor.execute(update_sql, (
                     dataset_id, now, last_successful_ts, status, last_watermark, pipeline_version
                 ))
-                print(f"State for dataset '{dataset_id}' updated with status '{status}'.")
+                logging.info(f"State for dataset '{dataset_id}' updated with status '{status}'.")
             except psycopg2.Error as e:
-                print(f"Error updating state for dataset '{dataset_id}': {e}")
+                logging.error(f"Error updating state for dataset '{dataset_id}': {e}")
                 self.conn.rollback()
                 raise
 
@@ -278,6 +279,6 @@ class PostgreSQLAdapter(LoaderInterface):
             try:
                 cursor.execute(query, params)
             except psycopg2.Error as e:
-                print(f"Error executing custom SQL: {e}")
+                logging.error(f"Error executing custom SQL: {e}")
                 self.conn.rollback()
                 raise

@@ -1,4 +1,5 @@
 import io
+import logging
 import zipfile
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -31,14 +32,14 @@ class PackageInsertsParser:
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
 
-        print(f"Parsing PDF with pdfplumber: {file_path}")
+        logging.info(f"Parsing PDF with pdfplumber: {file_path}")
         full_text = []
         all_tables = []
 
         try:
             with pdfplumber.open(file_path) as pdf:
                 for i, page in enumerate(pdf.pages):
-                    print(f"  - Processing page {i + 1}/{len(pdf.pages)}")
+                    logging.debug(f"  - Processing page {i + 1}/{len(pdf.pages)}")
                     # Extract text from the page
                     page_text = page.extract_text()
                     if page_text:
@@ -51,11 +52,11 @@ class PackageInsertsParser:
                             df = pd.DataFrame(table[1:], columns=table[0])
                             all_tables.append(df)
 
-            print(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
+            logging.info(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
             return "\n".join(full_text), all_tables
 
         except Exception as e:
-            print(f"Error parsing PDF file {file_path} with pdfplumber: {e}")
+            logging.error(f"Error parsing PDF file {file_path} with pdfplumber: {e}", exc_info=True)
             raise
 
 
@@ -90,7 +91,7 @@ class ApprovalsParser:
             raise FileNotFoundError(f"The file {file_path} does not exist.")
 
         try:
-            print(f"Parsing Excel file: {file_path}")
+            logging.info(f"Parsing Excel file: {file_path}")
             # First, read without a header to inspect the content
             df_no_header = pd.read_excel(file_path, header=None)
 
@@ -98,7 +99,7 @@ class ApprovalsParser:
             header_row_index = self._find_header_row(df_no_header, "販売名")
 
             # Now, read the excel file again, using the correct header row
-            print(f"Found header at row index {header_row_index}. Re-parsing...")
+            logging.info(f"Found header at row index {header_row_index}. Re-parsing...")
             df = pd.read_excel(file_path, header=header_row_index)
 
             # Clean up column names (remove newlines and spaces)
@@ -111,10 +112,10 @@ class ApprovalsParser:
             ffill_cols = df.columns[:3]
             df[ffill_cols] = df[ffill_cols].ffill()
 
-            print("Successfully parsed Excel file into DataFrame.")
+            logging.info("Successfully parsed Excel file into DataFrame.")
             return [df]
         except Exception as e:
-            print(f"Error parsing Excel file {file_path}: {e}")
+            logging.error(f"Error parsing Excel file {file_path}: {e}", exc_info=True)
             raise
 
 
@@ -144,16 +145,16 @@ class JaderParser:
                 name for name in zf.namelist() if name.lower() == f"{filename_stem.lower()}.csv"
             )
         except StopIteration:
-            print(f"Warning: '{filename_stem}.csv' not found in the zip file.")
+            logging.warning(f"Warning: '{filename_stem}.csv' not found in the zip file.")
             return pd.DataFrame()
 
-        print(f"Reading '{target_filename}' from zip...")
+        logging.debug(f"Reading '{target_filename}' from zip...")
         try:
             # Read the file as raw bytes first to detect encoding
             file_bytes = zf.read(target_filename)
 
             if not file_bytes:
-                print(f"Warning: '{target_filename}' is empty.")
+                logging.warning(f"Warning: '{target_filename}' is empty.")
                 return pd.DataFrame()
 
             # Use the utility to detect the encoding, with a fallback to Shift-JIS
@@ -165,7 +166,7 @@ class JaderParser:
             return pd.read_csv(io.BytesIO(file_bytes), encoding=encoding)
 
         except Exception as e:
-            print(f"Error reading or parsing '{target_filename}' from zip: {e}")
+            logging.error(f"Error reading or parsing '{target_filename}' from zip: {e}", exc_info=True)
             return pd.DataFrame()
 
     def parse(self, file_path: Path) -> Dict[str, pd.DataFrame]:
@@ -183,8 +184,8 @@ class JaderParser:
         if not file_path or not file_path.exists():
             raise FileNotFoundError(f"JADER zip file not found at {file_path}.")
 
-        print("--- JADER Parser ---")
-        print(f"Parsing JADER zip file: {file_path}")
+        logging.info("--- JADER Parser ---")
+        logging.info(f"Parsing JADER zip file: {file_path}")
         with zipfile.ZipFile(file_path) as zf:
             for file_stem in self.JADER_FILENAMES:
                 df = self._read_csv_from_zip(zf, file_stem)
@@ -192,7 +193,7 @@ class JaderParser:
                 table_name = f"jader_{file_stem.lower()}"
                 parsed_data[table_name] = df
                 if not df.empty:
-                    print(f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows.")
+                    logging.info(f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows.")
 
         return parsed_data
 
@@ -219,14 +220,14 @@ class ReviewReportsParser:
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
 
-        print(f"Parsing PDF with pdfplumber: {file_path}")
+        logging.info(f"Parsing PDF with pdfplumber: {file_path}")
         full_text = []
         all_tables = []
 
         try:
             with pdfplumber.open(file_path) as pdf:
                 for i, page in enumerate(pdf.pages):
-                    print(f"  - Processing page {i + 1}/{len(pdf.pages)}")
+                    logging.debug(f"  - Processing page {i + 1}/{len(pdf.pages)}")
                     # Extract text from the page
                     page_text = page.extract_text()
                     if page_text:
@@ -239,9 +240,9 @@ class ReviewReportsParser:
                             df = pd.DataFrame(table[1:], columns=table[0])
                             all_tables.append(df)
 
-            print(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
+            logging.info(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
             return "\n".join(full_text), all_tables
 
         except Exception as e:
-            print(f"Error parsing PDF file {file_path} with pdfplumber: {e}")
+            logging.error(f"Error parsing PDF file {file_path} with pdfplumber: {e}", exc_info=True)
             raise
