@@ -305,8 +305,9 @@ class ReviewReportsTransformer:
     def _find_summary(self, text: str) -> Optional[str]:
         """Extracts the summary section of the report."""
         try:
-            # Use DOTALL to match across newlines and MULTILINE to anchor the start
-            pattern = re.compile(r"^審査の概要\s*\n(.*?)\n^[A-Z\d]", re.DOTALL | re.MULTILINE)
+            # Simpler regex: find the keyword and capture everything after it until the next major section
+            # This is less brittle than assuming what the next section starts with.
+            pattern = re.compile(r"審査の概要\s*\n(.*?)(?=\n\s*\d+\.|\Z)", re.DOTALL)
             match = pattern.search(text)
             if match:
                 return match.group(1).strip()

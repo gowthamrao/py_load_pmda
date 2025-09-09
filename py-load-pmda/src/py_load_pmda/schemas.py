@@ -149,6 +149,12 @@ PMDA_REVIEW_REPORTS_SCHEMA = {
         "pmda_review_reports": {
             "columns": {
                 "document_id": "VARCHAR(64) NOT NULL",
+                "brand_name_jp": "TEXT",
+                "generic_name_jp": "TEXT",
+                "applicant_name_jp": "TEXT",
+                "application_date": "DATE",
+                "approval_date": "DATE",
+                "review_summary_text": "TEXT",
                 "raw_data_full": "JSONB",
                 "_meta_source_url": "TEXT",
                 "_meta_extraction_ts_utc": "TIMESTAMPTZ",

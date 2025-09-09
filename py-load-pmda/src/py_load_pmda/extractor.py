@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup, Tag
 
 class BaseExtractor:
     """
-    A base class for extractors with robust request handling.
+    A base class for extractors with robust request handling using a session.
     """
     def __init__(self, cache_dir: str = "./cache", retries: int = 3, backoff_factor: float = 0.5) -> None:
         self.cache_dir = Path(cache_dir)
@@ -20,15 +20,20 @@ class BaseExtractor:
         self.backoff_factor = backoff_factor
         self.base_url: str = "https://www.pmda.go.jp"
         self.new_state: Dict[str, Any] = {}
+        self.session = requests.Session()
+        # Set a default User-Agent for the session
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        })
 
     def _send_request(self, url: str, stream: bool = False, headers: Optional[Dict[str, str]] = None) -> requests.Response:
         """
-        Sends an HTTP GET request with retries and exponential backoff.
+        Sends an HTTP GET request with retries and exponential backoff using a session.
         """
         for attempt in range(self.retries):
             try:
                 time.sleep(1)
-                response = requests.get(url, stream=stream, timeout=30, headers=headers)
+                response = self.session.get(url, stream=stream, timeout=30, headers=headers)
                 response.raise_for_status()
                 return response
             except requests.RequestException as e:
@@ -43,12 +48,12 @@ class BaseExtractor:
 
     def _send_post_request(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None, stream: bool = False) -> requests.Response:
         """
-        Sends an HTTP POST request with retries and exponential backoff.
+        Sends an HTTP POST request with retries and exponential backoff using a session.
         """
         for attempt in range(self.retries):
             try:
                 time.sleep(1)
-                response = requests.post(url, data=data, headers=headers, stream=stream, timeout=30)
+                response = self.session.post(url, data=data, headers=headers, stream=stream, timeout=30)
                 response.raise_for_status()
                 return response
             except requests.RequestException as e:
@@ -243,11 +248,23 @@ class PackageInsertsExtractor(BaseExtractor):
             }
 
             try:
-                # Step 1: POST to the search form to get the results page
+                # Step 1: GET the search page to acquire a valid session token (nccharset)
+                logging.info("Fetching search page to get a session token...")
+                get_response = self._send_request(self.search_url)
+                get_soup = BeautifulSoup(get_response.text, "html.parser")
+                token_tag = get_soup.find("input", {"name": "nccharset"})
+                if not isinstance(token_tag, Tag) or not token_tag.has_attr("value"):
+                    raise ValueError("Could not find the 'nccharset' token on the search page.")
+
+                nccharset_token = str(token_tag["value"])
+                logging.info(f"Acquired nccharset token: {nccharset_token}")
+                form_data["nccharset"] = nccharset_token
+
+                # Step 2: POST to the search form with the valid token
                 logging.info(f"Submitting search form for '{name}'...")
-                response = self._send_post_request(self.search_url, data=form_data, headers=headers)
-                response.encoding = response.apparent_encoding
-                soup = BeautifulSoup(response.text, "html.parser")
+                post_response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                post_response.encoding = post_response.apparent_encoding
+                soup = BeautifulSoup(post_response.text, "html.parser")
 
                 # Step 2: Intelligently parse the search results table to find the correct PDF.
                 main_content = soup.find("div", id="ContentMainArea")
@@ -255,7 +272,8 @@ class PackageInsertsExtractor(BaseExtractor):
                     logging.warning(f"Could not find main content area for '{name}'. Skipping.")
                     continue
 
-                table = main_content.find("table")
+                # The results table now has a specific class name.
+                table = main_content.find("table", class_="result_list_table")
                 if not isinstance(table, Tag):
                     logging.warning(f"Could not find results table for '{name}'. Skipping.")
                     continue
@@ -346,19 +364,32 @@ class ReviewReportsExtractor(BaseExtractor):
             }
 
             try:
-                # Step 1: POST to the search form to get the results page
-                logging.info(f"Submitting search form for '{name}'...")
-                response = self._send_post_request(self.search_url, data=form_data, headers=headers)
-                response.encoding = response.apparent_encoding
-                soup = BeautifulSoup(response.text, "html.parser")
+                # Step 1: GET the search page to acquire a valid session token (nccharset)
+                logging.info("Fetching search page to get a session token...")
+                get_response = self._send_request(self.search_url)
+                get_soup = BeautifulSoup(get_response.text, "html.parser")
+                token_tag = get_soup.find("input", {"name": "nccharset"})
+                if not isinstance(token_tag, Tag) or not token_tag.has_attr("value"):
+                    raise ValueError("Could not find the 'nccharset' token on the search page.")
 
-                # Step 2: Intelligently parse the search results table to find the correct PDF.
+                nccharset_token = str(token_tag["value"])
+                logging.info(f"Acquired nccharset token: {nccharset_token}")
+                form_data["nccharset"] = nccharset_token
+
+                # Step 2: POST to the search form with the valid token
+                logging.info(f"Submitting search form for '{name}'...")
+                post_response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                post_response.encoding = post_response.apparent_encoding
+                soup = BeautifulSoup(post_response.text, "html.parser")
+
+                # Step 3: Intelligently parse the search results table to find the correct PDF.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
                     logging.warning(f"Could not find main content area for '{name}'. Skipping.")
                     continue
 
-                table = main_content.find("table")
+                # The results table now has a specific class name.
+                table = main_content.find("table", class_="result_list_table")
                 if not isinstance(table, Tag):
                     logging.warning(f"Could not find results table for '{name}'. Skipping.")
                     continue
