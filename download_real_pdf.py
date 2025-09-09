@@ -5,21 +5,21 @@ from pathlib import Path
 # Assumes the script is run from the repository root.
 sys.path.insert(0, str(Path.cwd() / "src"))
 
-from py_load_pmda.extractor import ReviewReportsExtractor
+from py_load_pmda.extractor import PackageInsertsExtractor
 
 def download_report():
     """
-    Uses the ReviewReportsExtractor to download a real PDF for testing.
+    Uses the PackageInsertsExtractor to download a real PDF for testing.
     """
-    print("Attempting to download a real review report PDF...")
+    print("Attempting to download a real package insert PDF...")
 
     # The cache directory where the file will be saved
     cache_dir = Path("cache")
     cache_dir.mkdir(exist_ok=True)
 
-    extractor = ReviewReportsExtractor(cache_dir=str(cache_dir))
+    extractor = PackageInsertsExtractor(cache_dir=str(cache_dir))
 
-    # Let's try to download a report for a well-known drug, Loxonin (ロキソニン)
+    # Let's try to download a package insert for a well-known drug, Loxonin (ロキソニン)
     drug_name = "ロキソニン"
 
     try:
@@ -27,7 +27,7 @@ def download_report():
         downloaded_data, _ = extractor.extract(drug_names=[drug_name], last_state={})
 
         if not downloaded_data:
-            print(f"Could not find or download a review report for '{drug_name}'.")
+            print(f"Could not find or download a package insert for '{drug_name}'.")
             return
 
         # Get the path of the first downloaded file

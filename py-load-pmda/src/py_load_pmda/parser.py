@@ -10,9 +10,10 @@ import pdfplumber
 from py_load_pmda import utils
 
 
-class PackageInsertsParser:
+class BasePDFParser:
     """
-    Parses downloaded Package Insert PDF files using pdfplumber.
+    A base class for parsing PDF files using pdfplumber.
+    Provides a generic method to extract all text and tables.
     """
     def __init__(self) -> None:
         pass
@@ -48,7 +49,8 @@ class PackageInsertsParser:
                     # Extract tables from the page
                     tables = page.extract_tables()
                     for table in tables:
-                        if table:
+                        # Ensure the table is not empty and has a header row
+                        if table and len(table) > 0 and any(table[0]):
                             df = pd.DataFrame(table[1:], columns=table[0])
                             all_tables.append(df)
 
@@ -58,6 +60,14 @@ class PackageInsertsParser:
         except Exception as e:
             logging.error(f"Error parsing PDF file {file_path} with pdfplumber: {e}", exc_info=True)
             raise
+
+
+class PackageInsertsParser(BasePDFParser):
+    """
+    Parses downloaded Package Insert PDF files.
+    Inherits the generic PDF parsing logic from BasePDFParser.
+    """
+    pass
 
 
 class ApprovalsParser:
@@ -198,51 +208,9 @@ class JaderParser:
         return parsed_data
 
 
-class ReviewReportsParser:
+class ReviewReportsParser(BasePDFParser):
     """
-    Parses downloaded Review Report PDF files using pdfplumber.
+    Parses downloaded Review Report PDF files.
+    Inherits the generic PDF parsing logic from BasePDFParser.
     """
-    def __init__(self) -> None:
-        pass
-
-    def parse(self, file_path: Path) -> Tuple[str, List[pd.DataFrame]]:
-        """
-        Parses the PDF file, extracting full text and all tables.
-
-        Args:
-            file_path: The path to the PDF file.
-
-        Returns:
-            A tuple containing:
-            - A string with the full text content of the PDF.
-            - A list of DataFrames, where each DataFrame is a table from the PDF.
-        """
-        if not file_path.exists():
-            raise FileNotFoundError(f"The file {file_path} does not exist.")
-
-        logging.info(f"Parsing PDF with pdfplumber: {file_path}")
-        full_text = []
-        all_tables = []
-
-        try:
-            with pdfplumber.open(file_path) as pdf:
-                for i, page in enumerate(pdf.pages):
-                    logging.debug(f"  - Processing page {i + 1}/{len(pdf.pages)}")
-                    # Extract text from the page
-                    page_text = page.extract_text()
-                    if page_text:
-                        full_text.append(page_text)
-
-                    # Extract tables from the page
-                    tables = page.extract_tables()
-                    for table in tables:
-                        if table:
-                            df = pd.DataFrame(table[1:], columns=table[0])
-                            all_tables.append(df)
-
-            logging.info(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
-            return "\n".join(full_text), all_tables
-
-        except Exception as e:
-            logging.error(f"Error parsing PDF file {file_path} with pdfplumber: {e}", exc_info=True)
-            raise
+    pass
