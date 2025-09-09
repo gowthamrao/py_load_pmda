@@ -1907,6 +1907,18 @@ files = [
 cli = ["click (>=5.0)"]
 
 [[package]]
+name = "python-json-logger"
+version = "2.0.7"
+description = "A python library adding a json log formatter"
+optional = false
+python-versions = ">=3.6"
+groups = ["main"]
+files = [
+    {file = "python-json-logger-2.0.7.tar.gz", hash = "sha256:23e7ec02d34237c5aa1e29a070193a4ea87583bb4e7f8fd06d3de8264c4b2e1c"},
+    {file = "python_json_logger-2.0.7-py3-none-any.whl", hash = "sha256:f380b826a991ebbe3de4d897aeec42760035ac760345e57b812938dc8b35e2bd"},
+]
+
+[[package]]
 name = "pytz"
 version = "2025.2"
 description = "World timezone definitions, modern and historical"
@@ -2436,4 +2448,4 @@ redshift = ["boto3", "redshift-connector"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12"
-content-hash = "611ee249f297593d4f959f95c33d2464fd3600f7ae577e85f306eeafea748ceb"
+content-hash = "e33db4ebae40ba9d20840b29ee5c6ea5f5a06131b1a8bb524588b20e2b94061d"
