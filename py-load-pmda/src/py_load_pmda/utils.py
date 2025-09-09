@@ -38,16 +38,14 @@ def to_iso_date(series: pd.Series) -> pd.Series:
         if pd.isna(d) or not isinstance(d, str):
             return pd.NaT
 
-        # First, try standard parsing
-        try:
-            return pd.to_datetime(d, errors='coerce')
-        except (ValueError, TypeError):
-            pass  # Will be handled by Wareki parsing
-
-        # If standard parsing fails, try Wareki parsing
+        # Try Wareki parsing first, as it's more specific.
         match = WAREKI_PATTERN.match(d.strip())
         if not match:
-            return pd.NaT
+            # If Wareki fails, try standard parsing
+            try:
+                return pd.to_datetime(d, errors="coerce")
+            except (ValueError, TypeError):
+                return pd.NaT
 
         parts = match.groupdict()
         era = parts["era"]
