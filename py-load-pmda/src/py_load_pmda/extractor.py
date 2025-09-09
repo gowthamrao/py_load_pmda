@@ -65,28 +65,42 @@ class BaseExtractor:
         return BeautifulSoup(response.text, "html.parser")
 
     def _download_file(self, url: str, last_state: dict = None) -> Path:
-        """Downloads a file, saves it to cache, and uses ETag for delta-checking."""
-        local_filename = url.split('/')[-1]
+        """
+        Downloads a file, saves it to cache, and uses ETag and Last-Modified
+        headers for delta-checking.
+        """
+        self.new_state = {}  # Reset state for this specific download
+        local_filename = url.split("/")[-1]
         local_filepath = self.cache_dir / local_filename
 
         headers = {}
-        if last_state and "etag" in last_state:
-            headers["If-None-Match"] = last_state["etag"]
+        if last_state:
+            if "etag" in last_state:
+                headers["If-None-Match"] = last_state["etag"]
+            if "last_modified" in last_state:
+                headers["If-Modified-Since"] = last_state["last_modified"]
 
         try:
             with self._send_request(url, stream=True, headers=headers) as r:
                 if r.status_code == 304:
-                    print(f"File '{local_filename}' is up to date (ETag match). Using cache.")
-                    self.new_state = last_state # Preserve the old state
+                    print(
+                        f"File '{local_filename}' is up to date (server returned 304 Not Modified). Using cache."
+                    )
+                    self.new_state = last_state  # Preserve the old state
                     return local_filepath
 
+                # If we get here, it's a 200 OK, so we download the file
                 with open(local_filepath, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
                 print(f"File '{local_filename}' downloaded successfully.")
 
+                # Update the new state with the latest headers from the response
                 if "ETag" in r.headers:
                     self.new_state["etag"] = r.headers["ETag"]
+                if "Last-Modified" in r.headers:
+                    self.new_state["last_modified"] = r.headers["Last-Modified"]
+
             return local_filepath
         except requests.RequestException as e:
             print(f"Error downloading file from {url}: {e}")
