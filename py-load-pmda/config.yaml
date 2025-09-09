@@ -49,15 +49,19 @@ datasets:
     parser: "JaderParser"
     transformer: "JaderTransformer"
     schema_name: "public"
-    load_mode: "append"
+    load_mode: "merge" # Changed from "append" to "merge"
     # The JADER dataset is normalized into four tables.
-    # The transformer will produce a dictionary of DataFrames,
-    # where the keys match these table names.
+    # The transformer produces a dictionary of DataFrames, where keys match table names.
+    # Primary keys are defined for each table to enable merge (upsert) operations.
     tables:
-      - "jader_demo"
-      - "jader_drug"
-      - "jader_reac"
-      - "jader_hist"
+      jader_demo:
+        primary_key: ["identification_number"]
+      jader_drug:
+        primary_key: ["drug_id"]
+      jader_reac:
+        primary_key: ["reac_id"]
+      jader_hist:
+        primary_key: ["hist_id"]
 
   package_inserts:
     extractor: "PackageInsertsExtractor"
