@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List, Optional, Type, cast
 
 import typer
@@ -5,6 +6,7 @@ from py_load_pmda import extractor, parser, schemas, transformer
 from py_load_pmda.extractor import BaseExtractor
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 from py_load_pmda.config import load_config
+from py_load_pmda.logging_config import setup_logging
 
 app = typer.Typer()
 
@@ -44,20 +46,22 @@ def init_db() -> None:
     """
     Initialize the database by creating the core schema and state tables.
     """
-    print("Initializing database...")
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    logging.info("Initializing database...")
     adapter = None
     try:
-        config = load_config()
         db_config = config.get("database", {})
         adapter = get_db_adapter(db_config.get("type", "postgres"))
         adapter.connect(db_config)
         adapter.ensure_schema(schemas.INGESTION_STATE_SCHEMA)
         adapter.commit()
-        print("\n✅ Database initialization complete.")
+        logging.info("✅ Database initialization complete.")
     except (FileNotFoundError, ConnectionError, ValueError) as e:
         if adapter:
             adapter.rollback()
-        print(f"\n❌ Database initialization failed: {e}")
+        logging.error("❌ Database initialization failed", exc_info=True)
         raise typer.Exit(code=1)
     finally:
         if adapter:
@@ -74,7 +78,6 @@ def run(
     """
     Run an ETL process for a specific dataset defined in the config.
     """
-    print(f"Starting ETL run for dataset '{dataset}'.")
     # Move argument validation to the top, before any connections are made.
     if dataset == "approvals" and not year:
         raise ValueError("The '--year' option is required for the 'approvals' dataset.")
@@ -86,8 +89,11 @@ def run(
     new_state = {}
 
     try:
-        # 1. Load Configuration
+        # 1. Load Configuration and Setup Logging
         config = load_config()
+        setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+        logging.info(f"Starting ETL run for dataset '{dataset}'.")
+
         db_config = config.get("database", {})
         dataset_configs = config.get("datasets", {})
         if dataset not in dataset_configs:
@@ -107,7 +113,7 @@ def run(
         # 4. Get Current State
         state_schema = str(schemas.INGESTION_STATE_SCHEMA["schema_name"])
         last_state = adapter.get_latest_state(dataset, schema=state_schema)
-        print(f"Last state for '{dataset}': {last_state}")
+        logging.debug(f"Last state for '{dataset}': {last_state}")
 
         # 5. Get ETL Classes from Registry
         extractor_class = AVAILABLE_EXTRACTORS.get(ds_config["extractor"])
@@ -120,7 +126,7 @@ def run(
         transformer_class = cast(Any, transformer_class)
 
         # 6. Execute ETL - A. Extract
-        print(f"--- Running Extractor: {ds_config['extractor']} ---")
+        logging.info(f"--- Running Extractor: {ds_config['extractor']} ---")
         extractor_instance = extractor_class()
         extract_args: Dict[str, Any] = {"last_state": last_state}
         if dataset == "approvals":
@@ -133,7 +139,7 @@ def run(
 
         # 7. Delta Check
         if new_state == last_state and last_state:
-            print("Data source has not changed since last run. Pipeline will stop.")
+            logging.info("Data source has not changed since last run. Pipeline will stop.")
             status = "SUCCESS"
             adapter.update_state(dataset, state=new_state, status=status, schema=state_schema)
             adapter.commit()
@@ -144,13 +150,13 @@ def run(
             downloaded_data, _ = cast(Any, extracted_output)
 
             for file_path, source_url in downloaded_data:
-                print(f"\n--- Processing file: {file_path.name} from {source_url} ---")
+                logging.info(f"--- Processing file: {file_path.name} from {source_url} ---")
                 parser_instance = parser_class()
                 parsed_output = parser_instance.parse(file_path)
 
                 # The PDF parsers now return a tuple of (full_text, tables).
                 if not parsed_output or (not parsed_output[0] and not parsed_output[1]):
-                    print(f"Parser returned no text or tables for {file_path.name}. Skipping.")
+                    logging.warning(f"Parser returned no text or tables for {file_path.name}. Skipping.")
                     continue
 
                 transformer_instance = transformer_class(source_url=source_url)
@@ -162,7 +168,7 @@ def run(
                 schema_name = ds_config["schema_name"]
                 primary_keys = ds_config.get("primary_key")
 
-                print(f"--- Loading data for {file_path.name} to {schema_name}.{table_name} (mode: {load_mode}) ---")
+                logging.info(f"--- Loading data for {file_path.name} to {schema_name}.{table_name} (mode: {load_mode}) ---")
                 if load_mode == "merge":
                     primary_keys = ds_config.get("primary_key")
                     if not primary_keys:
@@ -185,11 +191,11 @@ def run(
 
         elif dataset in ["approvals", "jader"]:
             file_path, source_url, _ = cast(Any, extracted_output)
-            print(f"--- Running Parser: {ds_config['parser']} ---")
+            logging.info(f"--- Running Parser: {ds_config['parser']} ---")
             parser_instance = parser_class()
             raw_df = parser_instance.parse(file_path)
 
-            print(f"--- Running Transformer: {ds_config['transformer']} ---")
+            logging.info(f"--- Running Transformer: {ds_config['transformer']} ---")
             transformer_instance = transformer_class(source_url=source_url)
             transformed_output = transformer_instance.transform(raw_df)
 
@@ -197,21 +203,21 @@ def run(
             schema_name = str(ds_config["schema_name"])
 
             if isinstance(transformed_output, dict):
-                print(f"--- Loading multiple tables for dataset '{dataset}' (mode: {load_mode}) ---")
+                logging.info(f"--- Loading multiple tables for dataset '{dataset}' (mode: {load_mode}) ---")
                 for table_name, df in transformed_output.items():
-                    print(f"Loading data into {schema_name}.{table_name}...")
+                    logging.info(f"Loading data into {schema_name}.{table_name}...")
                     if df.empty:
-                        print(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
+                        logging.info(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
                         continue
                     current_load_mode = "overwrite" if load_mode == "merge" else load_mode
                     if load_mode == "merge":
-                        print(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
+                        logging.warning(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
                     adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=current_load_mode)
             else:
                 table_name = str(ds_config["table_name"])
-                print(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
+                logging.info(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
                 if transformed_output.empty:
-                    print("Transformed DataFrame is empty. Nothing to load.")
+                    logging.info("Transformed DataFrame is empty. Nothing to load.")
                 elif load_mode == "merge":
                     primary_keys = ds_config.get("primary_key")
                     if not primary_keys:
@@ -233,14 +239,12 @@ def run(
             status = "SUCCESS"
 
         # 9. Update State
-        print(f"\n✅ ETL run for dataset '{dataset}' completed successfully.")
+        logging.info(f"✅ ETL run for dataset '{dataset}' completed successfully.")
 
     except Exception as e:
-        print(f"\n❌ ETL run failed: {e}")
+        logging.error(f"❌ ETL run failed for dataset '{dataset}'", exc_info=True)
         if adapter:
             adapter.rollback()
-        import traceback
-        traceback.print_exc()
         raise typer.Exit(code=1)
 
     finally:
@@ -256,17 +260,19 @@ def status() -> None:
     """
     Check the status of the last runs from the ingestion_state table.
     """
-    print("--- Ingestion Status ---")
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    logging.info("--- Ingestion Status ---")
     adapter = None
     try:
-        config = load_config()
         db_config = config.get("database", {})
         adapter = get_db_adapter(str(db_config.get("type", "postgres")))
         adapter.connect(db_config)
         states = adapter.get_all_states(schema=str(schemas.INGESTION_STATE_SCHEMA["schema_name"]))
 
         if not states:
-            print("No ingestion state found in the database.")
+            logging.info("No ingestion state found in the database.")
             return
 
         import pandas as pd
@@ -274,10 +280,12 @@ def status() -> None:
         for col in ['last_run_ts_utc', 'last_successful_run_ts_utc']:
             df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
         df.drop(columns=['last_watermark'], inplace=True, errors='ignore')
-        print(df.to_string())
+        # For the status command, printing the dataframe is the desired output,
+        # so we log it directly. The JSON formatter will handle the structure.
+        logging.info(df.to_string())
 
     except Exception as e:
-        print(f"\n❌ Failed to get status: {e}")
+        logging.error("❌ Failed to get status", exc_info=True)
         raise typer.Exit(code=1)
     finally:
         if adapter:
@@ -288,26 +296,28 @@ def check_config() -> None:
     """
     Validate configuration and database connectivity.
     """
-    print("Checking configuration...")
+    config = load_config()
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
+
+    logging.info("Checking configuration...")
     adapter = None
     try:
-        config = load_config()
-        print("✅ Configuration file loaded successfully.")
+        logging.info("✅ Configuration file loaded successfully.")
         db_config = config.get("database", {})
         adapter_type = db_config.get("type")
         if not adapter_type:
             raise ValueError("Database 'type' not specified in config.")
 
-        print(f"▶️ Database adapter type: {adapter_type}")
+        logging.info(f"▶️ Database adapter type: {adapter_type}")
         adapter = get_db_adapter(adapter_type)
-        print("▶️ Attempting to connect to the database...")
+        logging.info("▶️ Attempting to connect to the database...")
         adapter.connect(db_config)
         adapter.commit() # Test transaction
-        print("✅ Configuration check passed. Database connection successful.")
+        logging.info("✅ Configuration check passed. Database connection successful.")
     except (FileNotFoundError, ConnectionError, ValueError, NotImplementedError) as e:
         if adapter:
             adapter.rollback()
-        print(f"❌ Configuration check failed. {e}")
+        logging.error("❌ Configuration check failed", exc_info=True)
         raise typer.Exit(code=1)
     finally:
         if adapter:

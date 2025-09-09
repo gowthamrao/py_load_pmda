@@ -1,3 +1,4 @@
+import logging
 import random
 import time
 from pathlib import Path
@@ -33,10 +34,10 @@ class BaseExtractor:
             except requests.RequestException as e:
                 if attempt < self.retries - 1:
                     wait_time = self.backoff_factor * (2 ** attempt) + random.uniform(0, 1)
-                    print(f"Request to {url} failed. Retrying in {wait_time:.2f} seconds...")
+                    logging.warning(f"Request to {url} failed. Retrying in {wait_time:.2f} seconds...")
                     time.sleep(wait_time)
                 else:
-                    print(f"Request to {url} failed after {self.retries} attempts.")
+                    logging.error(f"Request to {url} failed after {self.retries} attempts.")
                     raise e
         raise requests.RequestException(f"Request to {url} failed after {self.retries} attempts.")
 
@@ -53,10 +54,10 @@ class BaseExtractor:
             except requests.RequestException as e:
                 if attempt < self.retries - 1:
                     wait_time = self.backoff_factor * (2 ** attempt) + random.uniform(0, 1)
-                    print(f"POST request to {url} failed. Retrying in {wait_time:.2f} seconds...")
+                    logging.warning(f"POST request to {url} failed. Retrying in {wait_time:.2f} seconds...")
                     time.sleep(wait_time)
                 else:
-                    print(f"POST request to {url} failed after {self.retries} attempts.")
+                    logging.error(f"POST request to {url} failed after {self.retries} attempts.")
                     raise e
         raise requests.RequestException(f"POST request to {url} failed after {self.retries} attempts.")
 
@@ -85,7 +86,7 @@ class BaseExtractor:
         try:
             with self._send_request(url, stream=True, headers=headers) as r:
                 if r.status_code == 304:
-                    print(
+                    logging.info(
                         f"File '{local_filename}' is up to date (server returned 304 Not Modified). Using cache."
                     )
                     if last_state:
@@ -96,7 +97,7 @@ class BaseExtractor:
                 with open(local_filepath, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
-                print(f"File '{local_filename}' downloaded successfully.")
+                logging.info(f"File '{local_filename}' downloaded successfully.")
 
                 # Update the new state with the latest headers from the response
                 if "ETag" in r.headers:
@@ -106,7 +107,7 @@ class BaseExtractor:
 
             return local_filepath
         except requests.RequestException as e:
-            print(f"Error downloading file from {url}: {e}")
+            logging.error(f"Error downloading file from {url}: {e}", exc_info=True)
             raise
 
 
@@ -137,19 +138,19 @@ class ApprovalsExtractor(BaseExtractor):
         """
         Main extraction method for approvals.
         """
-        print("Step 1: Fetching the main approvals list page...")
+        logging.info("Step 1: Fetching the main approvals list page...")
         main_page_soup = self._get_page_content(self.approvals_list_url)
 
-        print(f"Step 2: Finding the URL for fiscal year {year}...")
+        logging.info(f"Step 2: Finding the URL for fiscal year {year}...")
         yearly_url = self._find_yearly_approval_url(main_page_soup, year)
 
-        print(f"Step 3: Fetching the page for fiscal year {year}...")
+        logging.info(f"Step 3: Fetching the page for fiscal year {year}...")
         yearly_page_soup = self._get_page_content(yearly_url)
 
-        print("Step 4: Finding the Excel file download URL...")
+        logging.info("Step 4: Finding the Excel file download URL...")
         excel_url = self._find_excel_download_url(yearly_page_soup)
 
-        print("Step 5: Downloading the Excel file...")
+        logging.info("Step 5: Downloading the Excel file...")
         file_path = self._download_file(excel_url, last_state=last_state)
 
         return file_path, excel_url, self.new_state
@@ -182,15 +183,15 @@ class JaderExtractor(BaseExtractor):
         Main extraction method for the JADER dataset.
         It automates the download of the JADER zip file and uses ETags for delta detection.
         """
-        print("--- JADER Extractor ---")
-        print(f"Step 1: Fetching the JADER info page: {self.jader_info_url}")
+        logging.info("--- JADER Extractor ---")
+        logging.info(f"Step 1: Fetching the JADER info page: {self.jader_info_url}")
         info_page_soup = self._get_page_content(self.jader_info_url)
 
-        print("Step 2: Finding the JADER zip file download URL...")
+        logging.info("Step 2: Finding the JADER zip file download URL...")
         zip_url = self._find_jader_zip_url(info_page_soup)
-        print(f"Found download URL: {zip_url}")
+        logging.info(f"Found download URL: {zip_url}")
 
-        print("Step 3: Downloading the JADER zip file...")
+        logging.info("Step 3: Downloading the JADER zip file...")
         # The _download_file method handles caching and ETag checking.
         # It will return the path to the cached file and set self.new_state.
         file_path = self._download_file(zip_url, last_state=last_state)
@@ -218,12 +219,12 @@ class PackageInsertsExtractor(BaseExtractor):
             - A list of tuples, where each inner tuple is (file_path, source_url).
             - A dictionary containing the new state for delta checking.
         """
-        print("--- Package Inserts Extractor ---")
+        logging.info("--- Package Inserts Extractor ---")
         downloaded_data = []
         all_new_states = {}
 
         for name in drug_names:
-            print(f"Searching for package insert for drug: '{name}'")
+            logging.info(f"Searching for package insert for drug: '{name}'")
 
             # This payload is based on reverse-engineering the search form.
             form_data = {
@@ -243,7 +244,7 @@ class PackageInsertsExtractor(BaseExtractor):
 
             try:
                 # Step 1: POST to the search form to get the results page
-                print(f"Submitting search form for '{name}'...")
+                logging.info(f"Submitting search form for '{name}'...")
                 response = self._send_post_request(self.search_url, data=form_data, headers=headers)
                 response.encoding = response.apparent_encoding
                 soup = BeautifulSoup(response.text, "html.parser")
@@ -253,18 +254,18 @@ class PackageInsertsExtractor(BaseExtractor):
                 # This is a pragmatic approach as the page structure is complex.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
-                    print(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    logging.warning(f"Could not find main content area on results page for '{name}'. Skipping.")
                     continue
 
                 link = main_content.find("a", href=lambda href: href and ".pdf" in href)
 
                 if not isinstance(link, Tag) or not link.has_attr("href"):
-                    print(f"Could not find a PDF download link for '{name}'. Skipping.")
+                    logging.warning(f"Could not find a PDF download link for '{name}'. Skipping.")
                     continue
 
                 # The links are relative, so we need to join them with the base URL.
                 download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
-                print(f"Found download link: {download_url}")
+                logging.info(f"Found download link: {download_url}")
 
                 # Step 3: Download the file using the robust method from BaseExtractor
                 # ETag checking will prevent re-downloads if the file is unchanged.
@@ -274,10 +275,10 @@ class PackageInsertsExtractor(BaseExtractor):
                     all_new_states[download_url] = self.new_state
 
             except requests.RequestException as e:
-                print(f"Failed to process '{name}': {e}")
+                logging.error(f"Failed to process '{name}': {e}", exc_info=True)
                 continue
 
-        print(f"Downloaded {len(downloaded_data)} package insert(s).")
+        logging.info(f"Downloaded {len(downloaded_data)} package insert(s).")
         return downloaded_data, all_new_states
 
 
@@ -300,12 +301,12 @@ class ReviewReportsExtractor(BaseExtractor):
             - A list of tuples, where each inner tuple is (file_path, source_url).
             - A dictionary containing the new state for delta checking.
         """
-        print("--- Review Reports Extractor ---")
+        logging.info("--- Review Reports Extractor ---")
         downloaded_data = []
         all_new_states = {}
 
         for name in drug_names:
-            print(f"Searching for review report for drug: '{name}'")
+            logging.info(f"Searching for review report for drug: '{name}'")
 
             # This payload is based on reverse-engineering the search form.
             # "7" is the value for "審査報告書／再審査報告書／最適使用推進ガイドライン等"
@@ -326,7 +327,7 @@ class ReviewReportsExtractor(BaseExtractor):
 
             try:
                 # Step 1: POST to the search form to get the results page
-                print(f"Submitting search form for '{name}'...")
+                logging.info(f"Submitting search form for '{name}'...")
                 response = self._send_post_request(self.search_url, data=form_data, headers=headers)
                 response.encoding = response.apparent_encoding
                 soup = BeautifulSoup(response.text, "html.parser")
@@ -334,17 +335,17 @@ class ReviewReportsExtractor(BaseExtractor):
                 # Step 2: Find the first PDF download link on the results page.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
-                    print(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    logging.warning(f"Could not find main content area on results page for '{name}'. Skipping.")
                     continue
 
                 link = main_content.find("a", href=lambda href: href and ".pdf" in href)
 
                 if not isinstance(link, Tag) or not link.has_attr("href"):
-                    print(f"Could not find a PDF download link for '{name}'. Skipping.")
+                    logging.warning(f"Could not find a PDF download link for '{name}'. Skipping.")
                     continue
 
                 download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
-                print(f"Found download link: {download_url}")
+                logging.info(f"Found download link: {download_url}")
 
                 # Step 3: Download the file
                 file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
@@ -353,8 +354,8 @@ class ReviewReportsExtractor(BaseExtractor):
                     all_new_states[download_url] = self.new_state
 
             except requests.RequestException as e:
-                print(f"Failed to process '{name}': {e}")
+                logging.error(f"Failed to process '{name}': {e}", exc_info=True)
                 continue
 
-        print(f"Downloaded {len(downloaded_data)} review report(s).")
+        logging.info(f"Downloaded {len(downloaded_data)} review report(s).")
         return downloaded_data, all_new_states

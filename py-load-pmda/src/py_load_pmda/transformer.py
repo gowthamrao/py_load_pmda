@@ -1,6 +1,7 @@
 import hashlib
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -202,11 +203,11 @@ class JaderTransformer:
 
         for table_name, df_raw in data_frames.items():
             if df_raw is None or df_raw.empty:
-                print(f"No data for '{table_name}', skipping transformation.")
+                logging.info(f"No data for '{table_name}', skipping transformation.")
                 transformed_dfs[table_name] = pd.DataFrame()
                 continue
 
-            print(f"Transforming data for '{table_name}'...")
+            logging.info(f"Transforming data for '{table_name}'...")
             df = df_raw.copy()
 
             # 1. Create the raw_data_full column for high-fidelity audit trails
