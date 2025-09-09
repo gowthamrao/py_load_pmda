@@ -146,13 +146,13 @@ def run(
                 parser_instance = parser_class()
                 parsed_output = parser_instance.parse(file_path)
 
-                # Parsers for these types now consistently return a list of DataFrames.
-                # The check for an empty list is sufficient.
-                if not parsed_output:
-                    print(f"Parser returned no data for {file_path.name}. Skipping.")
+                # The PDF parsers now return a tuple of (full_text, tables).
+                if not parsed_output or (not parsed_output[0] and not parsed_output[1]):
+                    print(f"Parser returned no text or tables for {file_path.name}. Skipping.")
                     continue
 
                 transformer_instance = transformer_class(source_url=source_url)
+                # The transformer expects the full (text, tables) tuple.
                 transformed_df = transformer_instance.transform(parsed_output)
 
                 load_mode = mode or ds_config.get("load_mode", "merge")

@@ -241,113 +241,35 @@ class JaderTransformer:
         return transformed_dfs
 
 
+from typing import Tuple
+
 class PackageInsertsTransformer:
     """
-    Transforms a raw DataFrame from a Package Insert PDF into a standardized format.
+    Transforms raw data from a Package Insert PDF into a standardized format.
     """
     def __init__(self, source_url: str):
         self.source_url = source_url
 
-    def transform(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
+    def transform(self, parsed_data: Tuple[str, List[pd.DataFrame]]) -> pd.DataFrame:
         """
-        Transforms the raw DataFrames to match a generic document schema.
-
-        Since the content of the PDF tables is not yet known, this transformer
-        focuses on meeting the data fidelity requirements of the FRD by storing
-        the entire raw content in a JSONB-compatible column and adding metadata.
-
-        Args:
-            dfs: A list of raw DataFrames from the PackageInsertsParser.
-
-        Returns:
-            A transformed, single-row DataFrame ready for loading.
+        Transforms the parsed PDF data to match a generic document schema.
+        This version handles the new parser output but does not extract structured data.
         """
-        if not dfs:
+        full_text, tables = parsed_data
+        if not full_text and not tables:
             return pd.DataFrame()
 
-        # Concatenate all tables into one DataFrame for easier serialization
-        full_df = pd.concat(dfs, ignore_index=True)
-        # Convert all data to string to prevent JSON serialization errors with mixed types
-        full_df = full_df.astype(str)
+        # Convert tables to dicts for JSON serialization
+        tables_as_dicts = [df.to_dict(orient='records') for df in tables]
 
-
-        # 1. Create the 'raw_data_full' JSONB object
-        # This captures all the extracted tables in a structured way.
         raw_data_full = {
             "source_file_type": "pdf",
-            "extracted_tables": full_df.to_dict(orient='records')
+            "full_text": full_text,
+            "extracted_tables": tables_as_dicts
         }
         raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
-
-        # 2. Create a primary key for the document.
-        # We use a hash of the source URL for a deterministic ID.
         document_id = hashlib.sha256(self.source_url.encode('utf-8')).hexdigest()
 
-        # 3. Create the single-row DataFrame
-        transformed_data = {
-            "document_id": document_id,
-            "raw_data_full": raw_data_full_json,
-            "_meta_source_url": self.source_url,
-            "_meta_extraction_ts_utc": datetime.now(timezone.utc),
-            "_meta_load_ts_utc": datetime.now(timezone.utc), # Placeholder, will be updated at load time
-            "_meta_pipeline_version": version("py-load-pmda"),
-            "_meta_source_content_hash": hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
-        }
-
-        final_df = pd.DataFrame([transformed_data])
-
-        # 4. Define and order final columns
-        final_columns = [
-            'document_id',
-            'raw_data_full',
-            '_meta_source_url',
-            '_meta_extraction_ts_utc',
-            '_meta_load_ts_utc',
-            '_meta_pipeline_version',
-            '_meta_source_content_hash'
-        ]
-        return final_df[final_columns]
-
-
-class ReviewReportsTransformer:
-    """
-    Transforms a list of raw DataFrames from a Review Report PDF into a standardized format.
-    """
-    def __init__(self, source_url: str):
-        self.source_url = source_url
-
-    def transform(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
-        """
-        Transforms the raw DataFrames to match a generic document schema.
-
-        This transformer captures all extracted tables into a single JSONB-compatible
-        column for data fidelity, as required by the FRD.
-
-        Args:
-            dfs: A list of raw DataFrames from the ReviewReportsParser.
-
-        Returns:
-            A transformed, single-row DataFrame ready for loading.
-        """
-        if not dfs:
-            return pd.DataFrame()
-
-        # Concatenate all tables into one DataFrame for easier serialization
-        full_df = pd.concat(dfs, ignore_index=True)
-        # Convert all data to string to prevent JSON serialization errors with mixed types
-        full_df = full_df.astype(str)
-
-        # 1. Create the 'raw_data_full' JSONB object
-        raw_data_full = {
-            "source_file_type": "pdf",
-            "extracted_tables": full_df.to_dict(orient='records')
-        }
-        raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
-
-        # 2. Create a primary key for the document using a hash of the source URL
-        document_id = hashlib.sha256(self.source_url.encode('utf-8')).hexdigest()
-
-        # 3. Create the single-row DataFrame for loading
         transformed_data = {
             "document_id": document_id,
             "raw_data_full": raw_data_full_json,
@@ -357,17 +279,90 @@ class ReviewReportsTransformer:
             "_meta_pipeline_version": version("py-load-pmda"),
             "_meta_source_content_hash": hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
         }
+        return pd.DataFrame([transformed_data])
+
+
+class ReviewReportsTransformer:
+    """
+    Transforms parsed data from a Review Report PDF into a structured format.
+    """
+    def __init__(self, source_url: str):
+        self.source_url = source_url
+
+    def _find_value_after_keyword(self, text: str, keyword: str) -> str:
+        """Finds the first non-empty string on the same line after a keyword."""
+        try:
+            pattern = re.compile(f"^{keyword}: (.*)$", re.MULTILINE)
+            match = pattern.search(text)
+            if match:
+                return match.group(1).strip()
+        except Exception:
+            pass
+        return None
+
+    def _find_summary(self, text: str) -> str:
+        """Extracts the summary section of the report."""
+        try:
+            # Use DOTALL to match across newlines and MULTILINE to anchor the start
+            pattern = re.compile(r"^審査の概要\s*\n(.*?)\n^[A-Z\d]", re.DOTALL | re.MULTILINE)
+            match = pattern.search(text)
+            if match:
+                return match.group(1).strip()
+        except Exception:
+            pass
+        return None
+
+
+    def transform(self, parsed_data: Tuple[str, List[pd.DataFrame]]) -> pd.DataFrame:
+        """
+        Transforms the raw text and tables into a structured DataFrame.
+        """
+        full_text, tables = parsed_data
+        if not full_text:
+            return pd.DataFrame()
+
+        # 1. Extract structured data using regex and keyword searches
+        brand_name = self._find_value_after_keyword(full_text, "販売名")
+        generic_name = self._find_value_after_keyword(full_text, "一般的名称")
+        applicant = self._find_value_after_keyword(full_text, "申請者名")
+        app_date_str = self._find_value_after_keyword(full_text, "申請年月日")
+        app_date = utils.to_iso_date(pd.Series([app_date_str]))[0]
+        approval_date_str = self._find_value_after_keyword(full_text, "承認年月日")
+        approval_date = utils.to_iso_date(pd.Series([approval_date_str]))[0]
+        summary = self._find_summary(full_text)
+
+
+        # 2. Create the high-fidelity raw_data_full column
+        tables_as_dicts = [df.to_dict(orient='records') for df in tables]
+        raw_data_full = {
+            "source_file_type": "pdf",
+            "full_text": full_text,
+            "extracted_tables": tables_as_dicts
+        }
+        raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
+
+        # 3. Create the document ID and metadata
+        document_id = hashlib.sha256(self.source_url.encode('utf-8')).hexdigest()
+        content_hash = hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
+        now = datetime.now(timezone.utc)
+        pipeline_version = version("py-load-pmda")
+
+        # 4. Assemble the final DataFrame
+        transformed_data = {
+            "document_id": document_id,
+            "brand_name_jp": brand_name,
+            "generic_name_jp": generic_name,
+            "applicant_name_jp": applicant,
+            "application_date": app_date,
+            "approval_date": approval_date,
+            "review_summary_text": summary,
+            "raw_data_full": raw_data_full_json,
+            "_meta_source_url": self.source_url,
+            "_meta_extraction_ts_utc": now,
+            "_meta_load_ts_utc": now, # Placeholder
+            "_meta_pipeline_version": pipeline_version,
+            "_meta_source_content_hash": content_hash
+        }
 
         final_df = pd.DataFrame([transformed_data])
-
-        # 4. Define and order final columns
-        final_columns = [
-            'document_id',
-            'raw_data_full',
-            '_meta_source_url',
-            '_meta_extraction_ts_utc',
-            '_meta_load_ts_utc',
-            '_meta_pipeline_version',
-            '_meta_source_content_hash'
-        ]
-        return final_df[final_columns]
+        return final_df

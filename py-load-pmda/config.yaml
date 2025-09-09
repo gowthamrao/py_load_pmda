@@ -79,7 +79,16 @@ datasets:
     load_mode: "merge"
     primary_key: ["document_id"]
     columns:
+      # Structured data extracted from the report
       document_id: "VARCHAR(64)"
+      brand_name_jp: "TEXT"
+      generic_name_jp: "TEXT"
+      applicant_name_jp: "TEXT"
+      application_date: "DATE"
+      approval_date: "DATE"
+      review_summary_text: "TEXT"
+
+      # High-fidelity raw data and metadata for auditability
       raw_data_full: "JSONB"
       _meta_source_url: "TEXT"
       _meta_extraction_ts_utc: "TIMESTAMPTZ"
