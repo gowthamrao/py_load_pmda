@@ -209,10 +209,31 @@ def run(
                     if df.empty:
                         logging.info(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
                         continue
-                    current_load_mode = "overwrite" if load_mode == "merge" else load_mode
+
                     if load_mode == "merge":
-                        logging.warning(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
-                    adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=current_load_mode)
+                        # Get primary key from the new config structure for multi-table datasets
+                        table_config = ds_config.get("tables", {}).get(table_name, {})
+                        primary_keys = table_config.get("primary_key")
+                        if not primary_keys:
+                            raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for table '{table_name}'.")
+
+                        staging_table_name = f"staging_{table_name}"
+                        # Get the column definitions for the specific table from the schema
+                        if not target_schema_def or not target_schema_def.get("tables") or not cast(Dict[str, Any], target_schema_def.get("tables")).get(table_name):
+                            raise ValueError(f"Schema definition for table '{table_name}' not found.")
+                        tables = cast(Dict[str, Any], target_schema_def.get("tables"))
+                        table_def = cast(Dict[str, Any], tables.get(table_name))
+                        staging_schema = {"schema_name": schema_name, "tables": {staging_table_name: {"columns": table_def["columns"]}}}
+
+                        try:
+                            adapter.ensure_schema(staging_schema)
+                            adapter.bulk_load(data=df, target_table=staging_table_name, schema=schema_name, mode="overwrite")
+                            adapter.execute_merge(staging_table=staging_table_name, target_table=table_name, primary_keys=primary_keys, schema=schema_name)
+                        finally:
+                            adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
+                    else:
+                        # Fallback to existing append/overwrite logic
+                        adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=load_mode)
             else:
                 table_name = str(ds_config["table_name"])
                 logging.info(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
