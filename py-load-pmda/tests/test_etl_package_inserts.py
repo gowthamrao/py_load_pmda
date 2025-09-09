@@ -1,38 +1,40 @@
-import pytest
 from pathlib import Path
-import pandas as pd
+from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
+import pytest
 from py_load_pmda.extractor import PackageInsertsExtractor
 from py_load_pmda.parser import PackageInsertsParser
 from py_load_pmda.transformer import PackageInsertsTransformer
 
+
 class MockResponse:
     """Helper class to mock requests.Response objects."""
-    def __init__(self, text="", status_code=200, headers=None, content=b""):
+    def __init__(self, text: str = "", status_code: int = 200, headers: Optional[Dict[str, str]] = None, content: bytes = b"") -> None:
         self.text = text
         self.status_code = status_code
         self.headers = headers or {}
         self.content = content
         self.apparent_encoding = "utf-8"
-        self.encoding = None
+        self.encoding: Optional[str] = None
 
-    def raise_for_status(self):
+    def raise_for_status(self) -> None:
         if self.status_code >= 400:
             raise Exception("HTTP Error")
 
-    def iter_content(self, chunk_size):
+    def iter_content(self, chunk_size: int) -> Any:
         yield self.content
 
-    def __enter__(self):
+    def __enter__(self) -> "MockResponse":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         pass
 
 
 @pytest.fixture
-def mock_pmda_search(mocker):
+def mock_pmda_search(mocker: Any) -> None:
     """Mocks the requests.post and requests.get calls for the extractor test."""
 
     # Mock the POST request to the search form
@@ -56,7 +58,7 @@ def mock_pmda_search(mocker):
     )
 
 
-def test_package_inserts_extractor(mock_pmda_search, tmp_path):
+def test_package_inserts_extractor(mock_pmda_search: Any, tmp_path: Path) -> None:
     """Tests the PackageInsertsExtractor logic."""
     extractor = PackageInsertsExtractor(cache_dir=str(tmp_path))
     downloaded_data, new_state = extractor.extract(drug_names=["some_drug"], last_state={})
@@ -71,7 +73,7 @@ def test_package_inserts_extractor(mock_pmda_search, tmp_path):
 
 
 @patch("pdfplumber.open")
-def test_package_inserts_parser(mock_pdfplumber_open, mocker):
+def test_package_inserts_parser(mock_pdfplumber_open: Any, mocker: Any) -> None:
     """Tests the PackageInsertsParser logic by mocking the pdfplumber library."""
     # Arrange
     mock_pdf = MagicMock()
@@ -97,7 +99,7 @@ def test_package_inserts_parser(mock_pdfplumber_open, mocker):
     mock_pdfplumber_open.assert_called_once_with(dummy_pdf_path)
 
 
-def test_package_inserts_transformer():
+def test_package_inserts_transformer() -> None:
     """Tests the PackageInsertsTransformer logic."""
     # Arrange
     source_url = "https://www.pmda.go.jp/drugs/2023/dummy_insert.pdf"

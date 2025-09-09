@@ -1,12 +1,14 @@
 import os
-import yaml
 from pathlib import Path
+from typing import Any, Dict, Optional, cast
+
+import yaml
 from dotenv import load_dotenv
 
 CONFIG_FILENAME = "config.yaml"
 ENV_PREFIX = "PMDA_DB_"
 
-def load_config(path: str = None) -> dict:
+def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     """
     Loads configuration from a YAML file and overrides with environment variables.
 
@@ -43,7 +45,7 @@ def load_config(path: str = None) -> dict:
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
     with open(config_path, "r") as f:
-        config = yaml.safe_load(f)
+        config = cast(Dict[str, Any], yaml.safe_load(f))
 
     # Override with environment variables
     if "database" in config:

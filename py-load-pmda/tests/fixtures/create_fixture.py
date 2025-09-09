@@ -1,8 +1,10 @@
-import pandas as pd
 import zipfile
 from pathlib import Path
 
-def create_jader_test_fixture():
+import pandas as pd
+
+
+def create_jader_test_fixture() -> None:
     """
     Creates a test JADER zip file with correctly encoded Shift-JIS CSVs.
     """

@@ -1,11 +1,15 @@
-import pandas as pd
-import json
-from typing import List
 import hashlib
+import hashlib
+import json
+import re
 from datetime import datetime, timezone
 from importlib.metadata import version
-import re
+from typing import Any, Dict, List, Optional, Tuple
+
+import pandas as pd
+
 from py_load_pmda import utils
+
 
 class ApprovalsTransformer:
     """
@@ -166,7 +170,7 @@ class JaderTransformer:
         # to ensure the hash is stable even if raw_data_full format changes.
         cols_to_hash = [col for col in df.columns if col not in ['raw_data_full'] and not col.startswith('_meta')]
 
-        def default_converter(o):
+        def default_converter(o: Any) -> Any:
             """Handle non-serializable types for JSON dumping."""
             if pd.isna(o):
                 return None
@@ -184,7 +188,7 @@ class JaderTransformer:
         )
         return df
 
-    def transform(self, data_frames: dict) -> dict[str, pd.DataFrame]:
+    def transform(self, data_frames: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
         """
         Transforms the four raw JADER DataFrames.
 
@@ -241,8 +245,6 @@ class JaderTransformer:
         return transformed_dfs
 
 
-from typing import Tuple
-
 class PackageInsertsTransformer:
     """
     Transforms raw data from a Package Insert PDF into a standardized format.
@@ -286,10 +288,10 @@ class ReviewReportsTransformer:
     """
     Transforms parsed data from a Review Report PDF into a structured format.
     """
-    def __init__(self, source_url: str):
+    def __init__(self, source_url: str) -> None:
         self.source_url = source_url
 
-    def _find_value_after_keyword(self, text: str, keyword: str) -> str:
+    def _find_value_after_keyword(self, text: str, keyword: str) -> Optional[str]:
         """Finds the first non-empty string on the same line after a keyword."""
         try:
             pattern = re.compile(f"^{keyword}: (.*)$", re.MULTILINE)
@@ -300,7 +302,7 @@ class ReviewReportsTransformer:
             pass
         return None
 
-    def _find_summary(self, text: str) -> str:
+    def _find_summary(self, text: str) -> Optional[str]:
         """Extracts the summary section of the report."""
         try:
             # Use DOTALL to match across newlines and MULTILINE to anchor the start

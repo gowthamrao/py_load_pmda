@@ -2,10 +2,13 @@ import io
 import json
 from datetime import datetime, timezone
 from importlib.metadata import version
+from typing import Any, Dict, List, Optional, Tuple, cast
+
 import pandas as pd
 import psycopg2
 import psycopg2.extras
 from psycopg2 import sql
+from psycopg2.extensions import connection
 from py_load_pmda.interfaces import LoaderInterface
 
 
@@ -17,10 +20,10 @@ class PostgreSQLAdapter(LoaderInterface):
     loading data into, and managing state in a PostgreSQL database.
     """
 
-    def __init__(self):
-        self.conn = None
+    def __init__(self) -> None:
+        self.conn: Optional[connection] = None
 
-    def connect(self, connection_details: dict) -> None:
+    def connect(self, connection_details: Dict[str, Any]) -> None:
         """
         Establish connection to the target PostgreSQL database.
 
@@ -62,7 +65,7 @@ class PostgreSQLAdapter(LoaderInterface):
             self.conn = None
             print("PostgreSQL connection closed.")
 
-    def ensure_schema(self, schema_definition: dict) -> None:
+    def ensure_schema(self, schema_definition: Dict[str, Any]) -> None:
         """
         Ensure the target schema and tables exist in PostgreSQL.
         This method does NOT commit the transaction.
@@ -140,7 +143,7 @@ class PostgreSQLAdapter(LoaderInterface):
                 raise
 
     def execute_merge(
-        self, staging_table: str, target_table: str, primary_keys: list[str], schema: str
+        self, staging_table: str, target_table: str, primary_keys: List[str], schema: str
     ) -> None:
         """
         Execute a MERGE (Upsert) operation from a staging table.
@@ -196,7 +199,7 @@ class PostgreSQLAdapter(LoaderInterface):
                 self.conn.rollback()
                 raise
 
-    def get_latest_state(self, dataset_id: str, schema: str) -> dict:
+    def get_latest_state(self, dataset_id: str, schema: str) -> Dict[str, Any]:
         """
         Retrieve the latest ingestion state for a dataset from PostgreSQL.
         """
@@ -210,10 +213,10 @@ class PostgreSQLAdapter(LoaderInterface):
             cursor.execute(query, (dataset_id,))
             result = cursor.fetchone()
             if result and result[0]:
-                return result[0]
+                return cast(Dict[str, Any], result[0])
             return {}
 
-    def update_state(self, dataset_id: str, state: dict, status: str, schema: str) -> None:
+    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
         """
         Update the ingestion state for a dataset.
         This method does NOT commit the transaction.
@@ -254,7 +257,7 @@ class PostgreSQLAdapter(LoaderInterface):
                 self.conn.rollback()
                 raise
 
-    def get_all_states(self, schema: str) -> list[dict]:
+    def get_all_states(self, schema: str) -> List[Dict[str, Any]]:
         """Retrieve all ingestion states from the database."""
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
@@ -263,11 +266,11 @@ class PostgreSQLAdapter(LoaderInterface):
             schema=sql.Identifier(schema)
         )
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
-            cursor.execute(query)
+            cursor.execute(query) # type: ignore
             results = cursor.fetchall()
             return [dict(row) for row in results]
 
-    def execute_sql(self, query: str, params: tuple = None) -> None:
+    def execute_sql(self, query: str, params: Optional[Tuple[Any, ...]] = None) -> None:
         """Executes an arbitrary SQL command."""
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")

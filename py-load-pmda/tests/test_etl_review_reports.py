@@ -1,19 +1,20 @@
-import pytest
-from typer.testing import CliRunner
-from unittest.mock import MagicMock, patch
-import pandas as pd
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+from unittest.mock import MagicMock, patch
 
+import pandas as pd
+import pytest
 from py_load_pmda.cli import app
 from py_load_pmda.interfaces import LoaderInterface
 from py_load_pmda.transformer import ReviewReportsTransformer
 from py_load_pmda.utils import to_iso_date
+from typer.testing import CliRunner
 
 # --- Re-usable Mocks and Fixtures ---
 
 class MockDBAdapter(LoaderInterface):
     """A mock database adapter that spies on method calls with correct signatures."""
-    def __init__(self):
+    def __init__(self) -> None:
         self.connect_spy = MagicMock()
         self.ensure_schema_spy = MagicMock()
         self.bulk_load_spy = MagicMock()
@@ -26,32 +27,33 @@ class MockDBAdapter(LoaderInterface):
         self.get_all_states_spy = MagicMock(return_value=[])
         self.execute_sql_spy = MagicMock()
 
-    def connect(self, connection_details: dict): self.connect_spy(connection_details)
-    def ensure_schema(self, schema_definition: dict): self.ensure_schema_spy(schema_definition)
-    def bulk_load(self, data, target_table: str, schema: str, mode: str): self.bulk_load_spy(data=data, target_table=target_table, schema=schema, mode=mode)
-    def execute_merge(self, staging_table: str, target_table: str, primary_keys: list, schema: str): self.execute_merge_spy(staging_table=staging_table, target_table=target_table, primary_keys=primary_keys, schema=schema)
-    def get_latest_state(self, dataset_id: str, schema: str) -> dict: return self.get_latest_state_spy(dataset_id=dataset_id, schema=schema)
-    def update_state(self, dataset_id: str, state: dict, status: str, schema: str): self.update_state_spy(dataset_id=dataset_id, state=state, status=status, schema=schema)
-    def get_all_states(self, schema: str) -> list: return self.get_all_states_spy(schema=schema)
-    def commit(self): self.commit_spy()
-    def close(self): self.close_spy()
-    def rollback(self): self.rollback_spy()
-    def execute_sql(self, query: str, params=None): self.execute_sql_spy(query, params)
+    def connect(self, connection_details: Dict[str, Any]) -> None: self.connect_spy(connection_details)
+    def ensure_schema(self, schema_definition: Dict[str, Any]) -> None: self.ensure_schema_spy(schema_definition)
+    def bulk_load(self, data: pd.DataFrame, target_table: str, schema: str, mode: str = "append") -> None: self.bulk_load_spy(data=data, target_table=target_table, schema=schema, mode=mode)
+    def execute_merge(self, staging_table: str, target_table: str, primary_keys: List[str], schema: str) -> None: self.execute_merge_spy(staging_table=staging_table, target_table=target_table, primary_keys=primary_keys, schema=schema)
+    def get_latest_state(self, dataset_id: str, schema: str) -> Dict[str, Any]: return self.get_latest_state_spy(dataset_id=dataset_id, schema=schema) # type: ignore
+    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None: self.update_state_spy(dataset_id=dataset_id, state=state, status=status, schema=schema)
+    def get_all_states(self, schema: str) -> List[Dict[str, Any]]: return self.get_all_states_spy(schema=schema) # type: ignore
+    def commit(self) -> None: self.commit_spy()
+    def close(self) -> None: self.close_spy()
+    def rollback(self) -> None: self.rollback_spy()
+    def execute_sql(self, query: str, params: Any = None) -> None: self.execute_sql_spy(query, params)
 
 @pytest.fixture
-def mock_db_adapter(): return MockDBAdapter()
+def mock_db_adapter() -> MockDBAdapter: return MockDBAdapter()
 
 class MockResponse:
-    def __init__(self, text="", status_code=200, headers=None, content=b""):
+    def __init__(self, text: str = "", status_code: int = 200, headers: Optional[Dict[str, str]] = None, content: bytes = b"") -> None:
         self.text, self.status_code, self.headers, self.content = text, status_code, headers or {}, content
-    def raise_for_status(self):
-        if self.status_code >= 400: raise Exception("HTTP Error")
-    def iter_content(self, cs): yield self.content
-    def __enter__(self): return self
-    def __exit__(self, *args): pass
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise Exception("HTTP Error")
+    def iter_content(self, cs: int) -> Any: yield self.content
+    def __enter__(self) -> "MockResponse": return self
+    def __exit__(self, *args: Any) -> None: pass
 
 # --- Unit Test for the Transformer ---
-def test_review_reports_transformer_unit():
+def test_review_reports_transformer_unit() -> None:
     """Unit test for the ReviewReportsTransformer to ensure it extracts data correctly."""
     mock_text = "販売名: テストドラッグ錠\n申請者名: テスト製薬株式会社\n申請年月日: 令和7年1月15日\n承認年月日: 2025年9月10日"
     parser_output = (mock_text, [pd.DataFrame({'colA': [1]})])
@@ -69,8 +71,8 @@ def test_review_reports_transformer_unit():
 @patch("py_load_pmda.cli.load_config")
 @patch("py_load_pmda.cli.get_db_adapter")
 def test_review_reports_etl_pipeline(
-    mock_get_db, mock_load_config, mock_schemas, mock_extractors, mock_parsers, mock_transformers, mock_db_adapter
-):
+    mock_get_db: Any, mock_load_config: Any, mock_schemas: Any, mock_extractors: Any, mock_parsers: Any, mock_transformers: Any, mock_db_adapter: MockDBAdapter
+) -> None:
     """Tests the end-to-end ETL pipeline for the 'review_reports' dataset by mocking the ETL classes."""
     runner = CliRunner()
     mock_get_db.return_value = mock_db_adapter
