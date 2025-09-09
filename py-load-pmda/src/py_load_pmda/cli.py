@@ -1,5 +1,6 @@
 import typer
 import importlib
+from typing import List
 
 from py_load_pmda.config import load_config
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
@@ -65,12 +66,19 @@ def init_db():
 def run(
     dataset: str = typer.Option(..., "--dataset", help="The ID of the dataset to run."),
     mode: str = typer.Option(None, "--mode", help="Load mode: 'full' or 'delta'. Overrides config."),
-    year: int = typer.Option(2025, "--year", help="The fiscal year to process for approvals (if applicable)."),
+    year: int = typer.Option(None, "--year", help="The fiscal year to process for approvals (if applicable)."),
+    drug_name: List[str] = typer.Option(None, "--drug-name", help="Name of a drug to search for package inserts. Can be specified multiple times.")
 ):
     """
     Run an ETL process for a specific dataset defined in the config.
     """
     print(f"Starting ETL run for dataset '{dataset}'.")
+    # Move argument validation to the top, before any connections are made.
+    if dataset == "approvals" and not year:
+        raise ValueError("The '--year' option is required for the 'approvals' dataset.")
+    if dataset == "package_inserts" and not drug_name:
+        raise ValueError("At least one '--drug-name' option is required for the 'package_inserts' dataset.")
+
     adapter = None
     status = "FAILED"
     new_state = {}
@@ -95,7 +103,6 @@ def run(
         adapter.ensure_schema(target_schema_def)
 
         # 4. Get Current State
-        # The schema for the state table is assumed to be 'public' for now.
         state_schema = schemas.INGESTION_STATE_SCHEMA["schema_name"]
         last_state = adapter.get_latest_state(dataset, schema=state_schema)
         print(f"Last state for '{dataset}': {last_state}")
@@ -107,54 +114,41 @@ def run(
         if not all([extractor_class, parser_class, transformer_class]):
             raise ValueError(f"One or more ETL classes for '{dataset}' could not be found.")
 
-        # 6. Execute ETL
-        # A. Extract
+        # 6. Execute ETL - A. Extract
         print(f"--- Running Extractor: {ds_config['extractor']} ---")
         extractor_instance = extractor_class()
-        # Pass state to extractor for delta detection
         extract_args = {"last_state": last_state}
         if dataset == "approvals":
             extract_args['year'] = year
         elif dataset == "package_inserts":
-            # TODO: Make this list of drug names a configurable CLI option
-            extract_args['drug_names'] = ["スリンダ錠28", "ロキソニン"]
+            extract_args['drug_names'] = drug_name
 
-        # The extract method's return signature may vary.
         extracted_output = extractor_instance.extract(**extract_args)
-        new_state = extracted_output[-1] # By convention, new_state is the last element
+        new_state = extracted_output[-1]
 
-        # If the new state is the same as the old state, we can stop.
+        # 7. Delta Check
         if new_state == last_state and last_state:
             print("Data source has not changed since last run. Pipeline will stop.")
             status = "SUCCESS"
-            # We still want to update the 'last_run_ts_utc' in the state table
-            adapter.update_state(dataset, state=new_state, status=status, schema=schemas.INGESTION_STATE_SCHEMA["schema_name"])
+            adapter.update_state(dataset, state=new_state, status=status, schema=state_schema)
             adapter.commit()
             return
 
-        # B/C/L. Parse, Transform, and Load
-        # This part needs to handle different return types from extractors.
+        # 8. Parse, Transform, and Load based on dataset type
         if dataset == "package_inserts":
-            # For package inserts, we get a list of file paths and we process them one by one.
-            downloaded_files, all_new_states = extracted_output
-            new_state = all_new_states # The combined state from all downloaded files
+            downloaded_data, _ = extracted_output
 
-            for file_path in downloaded_files:
-                print(f"\n--- Processing file: {file_path.name} ---")
-                # B. Parse
+            for file_path, source_url in downloaded_data:
+                print(f"\n--- Processing file: {file_path.name} from {source_url} ---")
                 parser_instance = parser_class()
                 raw_df = parser_instance.parse(file_path)
                 if raw_df.empty:
                     print(f"Parser returned empty DataFrame for {file_path.name}. Skipping.")
                     continue
 
-                # C. Transform
-                # The source URL for a package insert is not easily available from the extractor,
-                # so we will use the filename as a stand-in for the transformer's source_url.
-                transformer_instance = transformer_class(source_url=file_path.name)
+                transformer_instance = transformer_class(source_url=source_url)
                 transformed_df = transformer_instance.transform(raw_df)
 
-                # D. Load
                 load_mode = mode or ds_config.get("load_mode", "merge")
                 table_name = ds_config["table_name"]
                 schema_name = ds_config["schema_name"]
@@ -174,73 +168,54 @@ def run(
                         adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
                 else:
                      adapter.bulk_load(data=transformed_df, target_table=table_name, schema=schema_name, mode=load_mode)
-
-            # After the loop, the main logic continues to the 'finally' block to update the overall state.
             status = "SUCCESS"
 
-        else: # Legacy path for approvals and jader
-            # B. Parse
-            file_path, source_url, new_state = extracted_output
+        elif dataset in ["approvals", "jader"]:
+            file_path, source_url, _ = extracted_output
             print(f"--- Running Parser: {ds_config['parser']} ---")
             parser_instance = parser_class()
             raw_df = parser_instance.parse(file_path)
 
-            # C. Transform
             print(f"--- Running Transformer: {ds_config['transformer']} ---")
             transformer_instance = transformer_class(source_url=source_url)
             transformed_output = transformer_instance.transform(raw_df)
 
-            # 7. Load
-        load_mode = mode or ds_config.get("load_mode", "overwrite")
-        schema_name = ds_config["schema_name"]
+            load_mode = mode or ds_config.get("load_mode", "overwrite")
+            schema_name = ds_config["schema_name"]
 
-        # Check if the transformer returned a dictionary of dataframes (for normalized schemas)
-        if isinstance(transformed_output, dict):
-            print(f"--- Loading multiple tables for dataset '{dataset}' (mode: {load_mode}) ---")
-            for table_name, df in transformed_output.items():
-                print(f"Loading data into {schema_name}.{table_name}...")
-                if df.empty:
-                    print(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
-                    continue
-
-                # For now, multi-table output only supports append/overwrite. Merge is complex.
-                if load_mode == "merge":
-                    print(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
-                    current_load_mode = "overwrite"
+            if isinstance(transformed_output, dict):
+                print(f"--- Loading multiple tables for dataset '{dataset}' (mode: {load_mode}) ---")
+                for table_name, df in transformed_output.items():
+                    print(f"Loading data into {schema_name}.{table_name}...")
+                    if df.empty:
+                        print(f"Transformed DataFrame for table '{table_name}' is empty. Nothing to load.")
+                        continue
+                    current_load_mode = "overwrite" if load_mode == "merge" else load_mode
+                    if load_mode == "merge":
+                        print(f"Warning: 'merge' mode is not yet supported for multi-table datasets. Defaulting to 'overwrite' for table {table_name}.")
+                    adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=current_load_mode)
+            else:
+                table_name = ds_config["table_name"]
+                print(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
+                if transformed_output.empty:
+                    print("Transformed DataFrame is empty. Nothing to load.")
+                elif load_mode == "merge":
+                    primary_keys = ds_config.get("primary_key")
+                    if not primary_keys:
+                        raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for dataset '{dataset}'.")
+                    staging_table_name = f"staging_{table_name}"
+                    staging_schema = {"schema_name": schema_name, "tables": {staging_table_name: {"columns": target_schema_def["tables"][table_name]["columns"]}}}
+                    try:
+                        adapter.ensure_schema(staging_schema)
+                        adapter.bulk_load(data=transformed_output, target_table=staging_table_name, schema=schema_name, mode="overwrite")
+                        adapter.execute_merge(staging_table=staging_table_name, target_table=table_name, primary_keys=primary_keys, schema=schema_name)
+                    finally:
+                        adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
                 else:
-                    current_load_mode = load_mode
+                    adapter.bulk_load(data=transformed_output, target_table=table_name, schema=schema_name, mode=load_mode)
+            status = "SUCCESS"
 
-                adapter.bulk_load(
-                    data=df,
-                    target_table=table_name,
-                    schema=schema_name,
-                    mode=current_load_mode,
-                )
-        # Handle single dataframe output (legacy or simple schemas)
-        else:
-            table_name = ds_config["table_name"]
-            print(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
-            df = transformed_output
-            if df.empty:
-                print("Transformed DataFrame is empty. Nothing to load.")
-            elif load_mode == "merge":
-                # Existing merge logic for single table datasets
-                primary_keys = ds_config.get("primary_key")
-                if not primary_keys:
-                    raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for dataset '{dataset}'.")
-                staging_table_name = f"staging_{table_name}"
-                staging_schema = {"schema_name": schema_name, "tables": {staging_table_name: {"columns": target_schema_def["tables"][table_name]["columns"]}}}
-                try:
-                    adapter.ensure_schema(staging_schema)
-                    adapter.bulk_load(data=df, target_table=staging_table_name, schema=schema_name, mode="overwrite")
-                    adapter.execute_merge(staging_table=staging_table_name, target_table=table_name, primary_keys=primary_keys, schema=schema_name)
-                finally:
-                    adapter.execute_sql(f"DROP TABLE IF EXISTS {schema_name}.{staging_table_name};")
-            else: # Handles 'append' and 'overwrite' for single table
-                adapter.bulk_load(data=df, target_table=table_name, schema=schema_name, mode=load_mode)
-
-        # 8. Update State
-        status = "SUCCESS"
+        # 9. Update State
         print(f"\n✅ ETL run for dataset '{dataset}' completed successfully.")
 
     except Exception as e:
