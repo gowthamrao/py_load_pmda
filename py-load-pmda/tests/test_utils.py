@@ -1,7 +1,10 @@
-import pytest
-import pandas as pd
 from datetime import date
+from typing import Any
+
+import pandas as pd
+import pytest
 from py_load_pmda import utils
+
 
 @pytest.mark.parametrize(
     "input_date, expected_date",
@@ -17,7 +20,7 @@ from py_load_pmda import utils
         ("", pd.NaT),
     ],
 )
-def test_to_iso_date(input_date, expected_date):
+def test_to_iso_date(input_date: Any, expected_date: Any) -> None:
     """
     Tests the to_iso_date utility with various date formats.
     """

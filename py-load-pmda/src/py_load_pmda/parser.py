@@ -1,10 +1,11 @@
-import pandas as pd
-from pathlib import Path
-import zipfile
 import io
-from typing import Dict, List
+import zipfile
+from pathlib import Path
+from typing import Dict, List, Tuple
+
+import pandas as pd
 import pdfplumber
-from typing import Tuple
+
 from py_load_pmda import utils
 
 
@@ -12,6 +13,8 @@ class PackageInsertsParser:
     """
     Parses downloaded Package Insert PDF files using pdfplumber.
     """
+    def __init__(self) -> None:
+        pass
 
     def parse(self, file_path: Path) -> Tuple[str, List[pd.DataFrame]]:
         """
@@ -60,6 +63,8 @@ class ApprovalsParser:
     """
     Parses the downloaded New Drug Approvals Excel file.
     """
+    def __init__(self) -> None:
+        pass
 
     def _find_header_row(self, df: pd.DataFrame, keyword: str, search_limit: int = 10) -> int:
         """Finds the header row index by searching for a keyword."""
@@ -67,7 +72,7 @@ class ApprovalsParser:
             # Normalize the row content by removing whitespace before searching
             normalized_row = row.astype(str).str.replace(r'\s+', '', regex=True)
             if normalized_row.str.contains(keyword, na=False).any():
-                return i
+                return int(i)  # type: ignore
         raise ValueError(f"Could not find header row containing '{keyword}' within the first {search_limit} rows.")
 
 
@@ -123,6 +128,8 @@ class JaderParser:
     - REAC.csv: Reaction (adverse event) information
     - HIST.csv: Patient history information
     """
+    def __init__(self) -> None:
+        pass
     # The four key files expected inside the JADER zip archive.
     JADER_FILENAMES = ["DEMO", "DRUG", "REAC", "HIST"]
 
@@ -176,7 +183,7 @@ class JaderParser:
         if not file_path or not file_path.exists():
             raise FileNotFoundError(f"JADER zip file not found at {file_path}.")
 
-        print(f"--- JADER Parser ---")
+        print("--- JADER Parser ---")
         print(f"Parsing JADER zip file: {file_path}")
         with zipfile.ZipFile(file_path) as zf:
             for file_stem in self.JADER_FILENAMES:
@@ -194,6 +201,8 @@ class ReviewReportsParser:
     """
     Parses downloaded Review Report PDF files using pdfplumber.
     """
+    def __init__(self) -> None:
+        pass
 
     def parse(self, file_path: Path) -> Tuple[str, List[pd.DataFrame]]:
         """

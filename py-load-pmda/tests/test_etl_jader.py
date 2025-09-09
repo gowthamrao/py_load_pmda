@@ -1,35 +1,36 @@
-import pytest
 from pathlib import Path
-import pandas as pd
-from typer.testing import CliRunner
-import psycopg2
+from typing import Any
 
-from py_load_pmda.parser import JaderParser
-from py_load_pmda.transformer import JaderTransformer
+import pandas as pd
+import psycopg2
+import pytest
 from py_load_pmda.cli import app
 from py_load_pmda.config import load_config
+from py_load_pmda.parser import JaderParser
+from py_load_pmda.transformer import JaderTransformer
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
 @pytest.fixture(scope="module")
-def jader_test_zip():
+def jader_test_zip() -> Path:
     """Fixture to provide the path to the new test JADER zip file."""
     p = Path(__file__).parent / "fixtures" / "test_jader_pipeline.zip"
     assert p.exists(), "Test fixture 'test_jader_pipeline.zip' not found!"
     return p
 
 @pytest.fixture(scope="module")
-def jader_parser():
+def jader_parser() -> JaderParser:
     """Fixture to provide a JaderParser instance."""
     return JaderParser()
 
 @pytest.fixture(scope="module")
-def jader_transformer():
+def jader_transformer() -> JaderTransformer:
     """Fixture to provide a JaderTransformer instance."""
     return JaderTransformer(source_url="http://dummy.url/test_jader_pipeline.zip")
 
 
-def test_jader_parser(jader_parser, jader_test_zip):
+def test_jader_parser(jader_parser: JaderParser, jader_test_zip: Path) -> None:
     """
     Test that the new JaderParser correctly parses the test zip file.
     """
@@ -51,7 +52,7 @@ def test_jader_parser(jader_parser, jader_test_zip):
     assert "原疾患等" in parsed_data["jader_hist"].columns
 
 
-def test_jader_transformer(jader_transformer, jader_parser, jader_test_zip):
+def test_jader_transformer(jader_transformer: JaderTransformer, jader_parser: JaderParser, jader_test_zip: Path) -> None:
     """
     Test that the new JaderTransformer correctly transforms the parsed data.
     """
@@ -95,7 +96,7 @@ def test_jader_transformer(jader_transformer, jader_parser, jader_test_zip):
 
 @pytest.mark.skip(reason="Requires a running database and is out of scope for this task")
 @pytest.mark.e2e
-def test_jader_cli_pipeline(jader_test_zip, mocker):
+def test_jader_cli_pipeline(jader_test_zip: Path, mocker: Any) -> None:
     """
     A full end-to-end test of the JADER pipeline using the CLI.
     This test requires a running PostgreSQL database (handled by testcontainers).
@@ -132,18 +133,24 @@ def test_jader_cli_pipeline(jader_test_zip, mocker):
         # Check that the four JADER tables were created and populated
         for table in ["jader_demo", "jader_drug", "jader_reac", "jader_hist"]:
             cur.execute(f"SELECT COUNT(*) FROM public.{table};")
-            count = cur.fetchone()[0]
+            count_result = cur.fetchone()
+            assert count_result is not None
+            count = count_result[0]
             assert count > 0, f"Table 'public.{table}' was not populated."
             print(f"Verified {count} rows in 'public.{table}'.")
 
         # Check a specific value to ensure correct data loading
         cur.execute("SELECT gender FROM public.jader_demo WHERE identification_number = '1';")
-        gender = cur.fetchone()[0]
+        gender_result = cur.fetchone()
+        assert gender_result is not None
+        gender = gender_result[0]
         assert gender == "男性"
 
         # Check state table
         cur.execute("SELECT status, last_watermark->>'etag' FROM public.ingestion_state WHERE dataset_id = 'jader';")
-        state_status, etag = cur.fetchone()
+        state_result = cur.fetchone()
+        assert state_result is not None
+        state_status, etag = state_result
         assert state_status == "SUCCESS"
         assert etag == "dummy-etag"
 

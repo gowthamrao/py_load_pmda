@@ -1,6 +1,9 @@
-import pandas as pd
 import re
 from datetime import date
+from typing import Any
+
+import chardet
+import pandas as pd
 
 # Define Japanese era start years (Gregorian)
 WAREKI_ERA_STARTS = {
@@ -20,7 +23,7 @@ def to_iso_date(series: pd.Series) -> pd.Series:
     Converts a pandas Series of dates in various formats (including Japanese
     Wareki) to ISO 8601 date objects.
     """
-    def convert_single_date(d):
+    def convert_single_date(d: Any) -> Any:
         if pd.isna(d) or not isinstance(d, str):
             return pd.NaT
 
@@ -53,10 +56,8 @@ def to_iso_date(series: pd.Series) -> pd.Series:
         except ValueError:
             return pd.NaT
 
-    return series.apply(convert_single_date).dt.date
+    return series.apply(convert_single_date).dt.date  # type: ignore
 
-
-import chardet
 
 def detect_encoding(data: bytes, fallback: str = 'utf-8') -> str:
     """Detects the character encoding of a byte string."""

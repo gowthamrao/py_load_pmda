@@ -1,11 +1,12 @@
+from typing import Any
 import pytest
-from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 from psycopg2 import sql
+from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 # --- Test Fixtures ---
 
 @pytest.fixture
-def adapter(mocker):
+def adapter(mocker: Any) -> PostgreSQLAdapter:
     """Provides a PostgreSQLAdapter with a mocked connection."""
     adapter = PostgreSQLAdapter()
     # Mock the connection object entirely
@@ -14,7 +15,7 @@ def adapter(mocker):
 
 # --- Test Cases ---
 
-def test_execute_merge_constructs_correct_sql(adapter, mocker):
+def test_execute_merge_constructs_correct_sql(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """
     Tests that execute_merge constructs the correct SQL statement.
     This is a unit test that verifies the SQL generation logic.
@@ -25,7 +26,7 @@ def test_execute_merge_constructs_correct_sql(adapter, mocker):
     pks = ["id"]
 
     # Mock the cursor and its methods
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
 
     # Configure the mock to return column names when queried
     column_names = [("id",), ("name",), ("value",)]
@@ -72,20 +73,20 @@ def test_execute_merge_constructs_correct_sql(adapter, mocker):
     assert actual_sql == expected_sql
 
     # 3. Verify that the transaction was NOT committed by this method
-    adapter.conn.commit.assert_not_called()
+    adapter.conn.commit.assert_not_called() # type: ignore
 
-def test_execute_merge_no_primary_keys_raises_error(adapter):
+def test_execute_merge_no_primary_keys_raises_error(adapter: PostgreSQLAdapter) -> None:
     """
     Tests that execute_merge raises a ValueError if no primary keys are provided.
     """
     with pytest.raises(ValueError, match="primary_keys must be provided"):
         adapter.execute_merge("staging", "target", [], "schema")
 
-def test_execute_merge_no_update_columns_skips_merge(adapter, mocker):
+def test_execute_merge_no_update_columns_skips_merge(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """
     Tests that the merge is skipped if all columns are primary keys.
     """
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
     # All columns are primary keys
     mock_cursor.fetchall.return_value = [("id1",), ("id2",)]
 
@@ -95,4 +96,4 @@ def test_execute_merge_no_update_columns_skips_merge(adapter, mocker):
     # It should be called once for information_schema, but not again.
     mock_cursor.execute.assert_called_once()
     # Commit should not be called if the merge is skipped
-    adapter.conn.commit.assert_not_called()
+    adapter.conn.commit.assert_not_called() # type: ignore

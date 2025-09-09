@@ -38,8 +38,30 @@ requests-mock = "^1.12.1"
 typer = {extras = ["all"], version = "^0.17.4"}
 psycopg2-binary = ">=2.9.9,<3.0.0"
 python-dotenv = "^1.0.0"
-
+ruff = "^0.5.5"
+mypy = "^1.11.0"
+pandas-stubs = "^2.0.0"
+types-psycopg2 = "^2.9.21"
+types-PyYAML = "^6.0.12"
+types-requests = "^2.31.0"
+types-beautifulsoup4 = "^4.12.0"
+testcontainers = {extras = ["postgres"], version = "^4.0.0"}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+# Set the maximum line length to 100.
+line-length = 100
+# Enable the isort rules.
+
+[tool.ruff.lint]
+# A sensible default set of rules
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+strict = true

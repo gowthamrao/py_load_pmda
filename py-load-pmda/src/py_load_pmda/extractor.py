@@ -1,26 +1,26 @@
-import os
-import requests
-import time
 import random
-import hashlib
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+import time
 from pathlib import Path
-from typing import Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urljoin
+
+import requests
+from bs4 import BeautifulSoup, Tag
+
 
 class BaseExtractor:
     """
     A base class for extractors with robust request handling.
     """
-    def __init__(self, cache_dir: str = "./cache", retries: int = 3, backoff_factor: float = 0.5):
+    def __init__(self, cache_dir: str = "./cache", retries: int = 3, backoff_factor: float = 0.5) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.retries = retries
         self.backoff_factor = backoff_factor
-        self.base_url = "https://www.pmda.go.jp"
-        self.new_state = {}
+        self.base_url: str = "https://www.pmda.go.jp"
+        self.new_state: Dict[str, Any] = {}
 
-    def _send_request(self, url: str, stream: bool = False, headers: dict = None) -> requests.Response:
+    def _send_request(self, url: str, stream: bool = False, headers: Optional[Dict[str, str]] = None) -> requests.Response:
         """
         Sends an HTTP GET request with retries and exponential backoff.
         """
@@ -38,8 +38,9 @@ class BaseExtractor:
                 else:
                     print(f"Request to {url} failed after {self.retries} attempts.")
                     raise e
+        raise requests.RequestException(f"Request to {url} failed after {self.retries} attempts.")
 
-    def _send_post_request(self, url: str, data: dict, headers: dict = None, stream: bool = False) -> requests.Response:
+    def _send_post_request(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None, stream: bool = False) -> requests.Response:
         """
         Sends an HTTP POST request with retries and exponential backoff.
         """
@@ -57,6 +58,7 @@ class BaseExtractor:
                 else:
                     print(f"POST request to {url} failed after {self.retries} attempts.")
                     raise e
+        raise requests.RequestException(f"POST request to {url} failed after {self.retries} attempts.")
 
     def _get_page_content(self, url: str) -> BeautifulSoup:
         """Fetches and parses the content of a given URL."""
@@ -64,7 +66,7 @@ class BaseExtractor:
         response.encoding = response.apparent_encoding
         return BeautifulSoup(response.text, "html.parser")
 
-    def _download_file(self, url: str, last_state: dict = None) -> Path:
+    def _download_file(self, url: str, last_state: Optional[Dict[str, Any]] = None) -> Path:
         """
         Downloads a file, saves it to cache, and uses ETag and Last-Modified
         headers for delta-checking.
@@ -86,7 +88,8 @@ class BaseExtractor:
                     print(
                         f"File '{local_filename}' is up to date (server returned 304 Not Modified). Using cache."
                     )
-                    self.new_state = last_state  # Preserve the old state
+                    if last_state:
+                        self.new_state = last_state  # Preserve the old state
                     return local_filepath
 
                 # If we get here, it's a 200 OK, so we download the file
@@ -111,26 +114,26 @@ class ApprovalsExtractor(BaseExtractor):
     """
     Extracts the New Drug Approvals list from the PMDA website.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.approvals_list_url = urljoin(self.base_url, "/review-services/drug-reviews/review-information/p-drugs/0010.html")
+        self.approvals_list_url: str = urljoin(self.base_url, "/review-services/drug-reviews/review-information/p-drugs/0010.html")
 
     def _find_yearly_approval_url(self, soup: BeautifulSoup, year: int) -> str:
         """Finds the URL for a specific year's approval list."""
         year_text = f"{year}年度"
         link = soup.find("a", string=lambda text: text and year_text in text)
-        if not link or not link.has_attr("href"):
+        if not isinstance(link, Tag) or not link.has_attr("href"):
             raise ValueError(f"Could not find link for year {year}")
-        return urljoin(self.base_url, link["href"])
+        return urljoin(self.base_url, str(link["href"]))
 
     def _find_excel_download_url(self, soup: BeautifulSoup) -> str:
         """Finds the download link for the Excel file on the page."""
         link = soup.find("a", href=lambda href: href and ".xlsx" in href)
-        if not link or not link.has_attr("href"):
+        if not isinstance(link, Tag) or not link.has_attr("href"):
             raise ValueError("Could not find the Excel file download link.")
-        return urljoin(self.base_url, link["href"])
+        return urljoin(self.base_url, str(link["href"]))
 
-    def extract(self, year: int, last_state: dict) -> Tuple[Path, str]:
+    def extract(self, year: int, last_state: Dict[str, Any]) -> Tuple[Path, str, Dict[str, Any]]:
         """
         Main extraction method for approvals.
         """
@@ -156,10 +159,10 @@ class JaderExtractor(BaseExtractor):
     """
     Extracts the JADER (Japanese Adverse Drug Event Report) dataset from the PMDA website.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # This is the landing page where the link to the JADER zip file is found.
-        self.jader_info_url = "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0005.html"
+        self.jader_info_url: str = "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0005.html"
 
     def _find_jader_zip_url(self, soup: BeautifulSoup) -> str:
         """
@@ -168,13 +171,13 @@ class JaderExtractor(BaseExtractor):
         """
         # A more robust selector might be needed if the site structure changes.
         link = soup.find("a", href=lambda href: href and "jader" in href.lower() and href.endswith(".zip"))
-        if not link or not link.has_attr("href"):
+        if not isinstance(link, Tag) or not link.has_attr("href"):
             raise ValueError("Could not find the JADER zip file download link on the page.")
 
         # The URL in the href attribute is relative, so we join it with the base URL.
-        return urljoin(self.base_url, link["href"])
+        return urljoin(self.base_url, str(link["href"]))
 
-    def extract(self, last_state: dict) -> Tuple[Path, str, dict]:
+    def extract(self, last_state: Dict[str, Any]) -> Tuple[Path, str, Dict[str, Any]]:
         """
         Main extraction method for the JADER dataset.
         It automates the download of the JADER zip file and uses ETags for delta detection.
@@ -200,12 +203,12 @@ class PackageInsertsExtractor(BaseExtractor):
     """
     Extracts Package Inserts from the PMDA search portal.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # The POST request goes to a URL without a trailing slash.
-        self.search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
+        self.search_url: str = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
 
-    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Tuple[Path, str]], dict]:
+    def extract(self, drug_names: List[str], last_state: Dict[str, Any]) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
         """
         Main extraction method for package inserts.
         It searches for each drug name and downloads the corresponding package insert PDF.
@@ -249,18 +252,18 @@ class PackageInsertsExtractor(BaseExtractor):
                 # We assume the first PDF link in the main content area is the correct one.
                 # This is a pragmatic approach as the page structure is complex.
                 main_content = soup.find("div", id="ContentMainArea")
-                if not main_content:
+                if not isinstance(main_content, Tag):
                     print(f"Could not find main content area on results page for '{name}'. Skipping.")
                     continue
 
                 link = main_content.find("a", href=lambda href: href and ".pdf" in href)
 
-                if not link or not link.has_attr("href"):
+                if not isinstance(link, Tag) or not link.has_attr("href"):
                     print(f"Could not find a PDF download link for '{name}'. Skipping.")
                     continue
 
                 # The links are relative, so we need to join them with the base URL.
-                download_url = urljoin("https://www.pmda.go.jp", link["href"])
+                download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
                 print(f"Found download link: {download_url}")
 
                 # Step 3: Download the file using the robust method from BaseExtractor
@@ -282,12 +285,12 @@ class ReviewReportsExtractor(BaseExtractor):
     """
     Extracts Review Reports from the PMDA search portal.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # The POST request goes to a URL without a trailing slash.
-        self.search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
+        self.search_url: str = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
 
-    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Tuple[Path, str]], dict]:
+    def extract(self, drug_names: List[str], last_state: Dict[str, Any]) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
         """
         Main extraction method for review reports.
         It searches for each drug name and downloads the corresponding review report PDF.
@@ -330,17 +333,17 @@ class ReviewReportsExtractor(BaseExtractor):
 
                 # Step 2: Find the first PDF download link on the results page.
                 main_content = soup.find("div", id="ContentMainArea")
-                if not main_content:
+                if not isinstance(main_content, Tag):
                     print(f"Could not find main content area on results page for '{name}'. Skipping.")
                     continue
 
                 link = main_content.find("a", href=lambda href: href and ".pdf" in href)
 
-                if not link or not link.has_attr("href"):
+                if not isinstance(link, Tag) or not link.has_attr("href"):
                     print(f"Could not find a PDF download link for '{name}'. Skipping.")
                     continue
 
-                download_url = urljoin("https://www.pmda.go.jp", link["href"])
+                download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
                 print(f"Found download link: {download_url}")
 
                 # Step 3: Download the file

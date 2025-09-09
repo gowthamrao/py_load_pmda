@@ -1,40 +1,40 @@
-import pytest
+
+from typing import Any, Dict, List, Optional
 from pathlib import Path
 import pandas as pd
-from unittest.mock import MagicMock
-
+import pytest
 from py_load_pmda.extractor import ApprovalsExtractor
-from py_load_pmda.parser import ApprovalsParser
 from py_load_pmda.transformer import ApprovalsTransformer
 
+
 @pytest.fixture
-def mock_pmda_pages(mocker):
+def mock_pmda_pages(mocker: Any) -> None:
     """Mocks the requests.get calls to return fake PMDA HTML pages."""
 
     # Using a class to better structure the mock responses
     class MockResponse:
-        def __init__(self, text="", status_code=200, headers=None, content=None, apparent_encoding="utf-8"):
+        def __init__(self, text: str = "", status_code: int = 200, headers: Optional[Dict[str, str]] = None, content: Optional[bytes] = None, apparent_encoding: str = "utf-8") -> None:
             self.text = text
             self.status_code = status_code
             self.headers = headers or {}
             self._content = content or b""
             self.apparent_encoding = apparent_encoding
-            self.encoding = None # Can be set by the calling code
+            self.encoding: Optional[str] = None # Can be set by the calling code
 
-        def raise_for_status(self):
+        def raise_for_status(self) -> None:
             if self.status_code >= 400:
                 raise Exception("HTTP Error")
 
-        def iter_content(self, chunk_size):
+        def iter_content(self, chunk_size: int) -> Any:
             yield self._content
 
-        def __enter__(self):
+        def __enter__(self) -> "MockResponse":
             return self
 
-        def __exit__(self, exc_type, exc_val, exc_tb):
+        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
             pass
 
-    mock_responses = {
+    mock_responses: Dict[str, MockResponse] = {
         "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0010.html": MockResponse(
             text="""
             <html><body>
@@ -55,12 +55,12 @@ def mock_pmda_pages(mocker):
         )
     }
 
-    def get_side_effect(url, **kwargs):
+    def get_side_effect(url: str, **kwargs: Any) -> MockResponse:
         return mock_responses.get(url, MockResponse(status_code=404))
 
     mocker.patch("requests.get", side_effect=get_side_effect)
 
-def test_approvals_extractor(mock_pmda_pages, tmp_path):
+def test_approvals_extractor(mock_pmda_pages: Any, tmp_path: Path) -> None:
     """Tests the ApprovalsExtractor logic."""
     extractor = ApprovalsExtractor(cache_dir=str(tmp_path))
     file_path, source_url, new_state = extractor.extract(year=2025, last_state={})
@@ -72,9 +72,9 @@ def test_approvals_extractor(mock_pmda_pages, tmp_path):
     assert new_state["etag"] == "test-etag"
 
 @pytest.fixture
-def sample_raw_df():
+def sample_raw_df() -> pd.DataFrame:
     """Provides a sample raw DataFrame as output from the parser."""
-    data = {
+    data: Dict[str, List[Any]] = {
         '分野': ['第５', '抗悪'],
         '承認日': ['2025.5.19', '2025.5.19'],
         'No.': [1.0, 5.0],
@@ -88,7 +88,7 @@ def sample_raw_df():
     }
     return pd.DataFrame(data)
 
-def test_approvals_transformer(sample_raw_df):
+def test_approvals_transformer(sample_raw_df: pd.DataFrame) -> None:
     """Tests the ApprovalsTransformer logic."""
     source_url = "https://www.pmda.go.jp/files/000276012.xlsx"
     transformer = ApprovalsTransformer(source_url=source_url)

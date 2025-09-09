@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+
 import pandas as pd
+
 
 class LoaderInterface(ABC):
     """
@@ -12,12 +15,12 @@ class LoaderInterface(ABC):
     """
 
     @abstractmethod
-    def connect(self, connection_details: dict) -> None:
+    def connect(self, connection_details: Dict[str, Any]) -> None:
         """Establish connection to the target database."""
         pass
 
     @abstractmethod
-    def ensure_schema(self, schema_definition: dict) -> None:
+    def ensure_schema(self, schema_definition: Dict[str, Any]) -> None:
         """Ensure the target schema and tables exist."""
         pass
 
@@ -33,7 +36,7 @@ class LoaderInterface(ABC):
 
     @abstractmethod
     def execute_merge(
-        self, staging_table: str, target_table: str, primary_keys: list[str], schema: str
+        self, staging_table: str, target_table: str, primary_keys: List[str], schema: str
     ) -> None:
         """
         Execute a MERGE (Upsert) operation from a staging table to the target table.
@@ -41,16 +44,16 @@ class LoaderInterface(ABC):
         pass
 
     @abstractmethod
-    def get_latest_state(self, dataset_id: str, schema: str) -> dict:
+    def get_latest_state(self, dataset_id: str, schema: str) -> Dict[str, Any]:
         """Retrieve the latest ingestion state for a dataset."""
         pass
 
     @abstractmethod
-    def update_state(self, dataset_id: str, state: dict, status: str, schema: str) -> None:
+    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
         """Transactionally update the ingestion state after a load."""
         pass
 
     @abstractmethod
-    def get_all_states(self, schema: str) -> list[dict]:
+    def get_all_states(self, schema: str) -> List[Dict[str, Any]]:
         """Retrieve all ingestion states from the database."""
         pass
