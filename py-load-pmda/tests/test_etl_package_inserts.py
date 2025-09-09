@@ -44,7 +44,17 @@ def mock_pmda_search(mocker: Any) -> None:
             text="""
             <html>
                 <div id="ContentMainArea">
-                    <a href="/drugs/2023/dummy_insert.pdf">Download PDF</a>
+                    <table class="results-table">
+                        <tbody>
+                            <tr>
+                                <td>some_drug</td>
+                                <td>some_generic</td>
+                                <td>some_company</td>
+                                <td><a href="...">...</a></td>
+                                <td><a href="/drugs/2023/dummy_insert.pdf">Download PDF</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </html>
             """

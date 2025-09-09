@@ -249,26 +249,46 @@ class PackageInsertsExtractor(BaseExtractor):
                 response.encoding = response.apparent_encoding
                 soup = BeautifulSoup(response.text, "html.parser")
 
-                # Step 2: Find the first PDF download link on the results page.
-                # We assume the first PDF link in the main content area is the correct one.
-                # This is a pragmatic approach as the page structure is complex.
+                # Step 2: Intelligently parse the search results table to find the correct PDF.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
-                    logging.warning(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    logging.warning(f"Could not find main content area for '{name}'. Skipping.")
                     continue
 
-                link = main_content.find("a", href=lambda href: href and ".pdf" in href)
-
-                if not isinstance(link, Tag) or not link.has_attr("href"):
-                    logging.warning(f"Could not find a PDF download link for '{name}'. Skipping.")
+                table = main_content.find("table")
+                if not isinstance(table, Tag):
+                    logging.warning(f"Could not find results table for '{name}'. Skipping.")
                     continue
 
-                # The links are relative, so we need to join them with the base URL.
-                download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
-                logging.info(f"Found download link: {download_url}")
+                download_url = None
+                tbody = table.find("tbody")
+                if not isinstance(tbody, Tag):
+                    tbody = table  # Fallback to the table itself
 
-                # Step 3: Download the file using the robust method from BaseExtractor
-                # ETag checking will prevent re-downloads if the file is unchanged.
+                rows = tbody.find_all("tr")
+                for row in rows:  # Iterate all rows in the body
+                    cells = row.find_all("td")
+                    # Expecting at least 5 columns: Brand, Generic, Applicant, Detail, PDF
+                    if len(cells) < 5:
+                        continue
+
+                    # The brand name is in the first cell, based on the test case HTML.
+                    brand_name = cells[0].get_text(strip=True)
+
+                    if name == brand_name:
+                        logging.info(f"Found exact match for '{name}' in results table.")
+                        pdf_link_tag = cells[4].find("a", href=lambda href: href and ".pdf" in href)
+                        if isinstance(pdf_link_tag, Tag) and pdf_link_tag.has_attr("href"):
+                            # The URL can be relative or absolute. urljoin handles both.
+                            download_url = urljoin(self.base_url, str(pdf_link_tag["href"]))
+                            logging.info(f"Found download link: {download_url}")
+                            break  # Stop after finding the first exact match
+
+                if not download_url:
+                    logging.warning(f"Could not find a matching PDF download link for '{name}'. Skipping.")
+                    continue
+
+                # Step 3: Download the file
                 file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
                 if file_path and file_path.exists():
                     downloaded_data.append((file_path, download_url))
@@ -332,20 +352,40 @@ class ReviewReportsExtractor(BaseExtractor):
                 response.encoding = response.apparent_encoding
                 soup = BeautifulSoup(response.text, "html.parser")
 
-                # Step 2: Find the first PDF download link on the results page.
+                # Step 2: Intelligently parse the search results table to find the correct PDF.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
-                    logging.warning(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    logging.warning(f"Could not find main content area for '{name}'. Skipping.")
                     continue
 
-                link = main_content.find("a", href=lambda href: href and ".pdf" in href)
-
-                if not isinstance(link, Tag) or not link.has_attr("href"):
-                    logging.warning(f"Could not find a PDF download link for '{name}'. Skipping.")
+                table = main_content.find("table")
+                if not isinstance(table, Tag):
+                    logging.warning(f"Could not find results table for '{name}'. Skipping.")
                     continue
 
-                download_url = urljoin("https://www.pmda.go.jp", str(link["href"]))
-                logging.info(f"Found download link: {download_url}")
+                download_url = None
+                tbody = table.find("tbody")
+                if not isinstance(tbody, Tag):
+                    tbody = table  # Fallback to the table itself
+
+                rows = tbody.find_all("tr")
+                for row in rows:  # Iterate all rows in the body
+                    cells = row.find_all("td")
+                    if len(cells) < 5:
+                        continue
+
+                    brand_name = cells[0].get_text(strip=True)
+                    if name == brand_name:
+                        logging.info(f"Found exact match for '{name}' in results table.")
+                        pdf_link_tag = cells[4].find("a", href=lambda href: href and ".pdf" in href)
+                        if isinstance(pdf_link_tag, Tag) and pdf_link_tag.has_attr("href"):
+                            download_url = urljoin(self.base_url, str(pdf_link_tag["href"]))
+                            logging.info(f"Found download link: {download_url}")
+                            break
+
+                if not download_url:
+                    logging.warning(f"Could not find a matching PDF download link for '{name}'. Skipping.")
+                    continue
 
                 # Step 3: Download the file
                 file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
