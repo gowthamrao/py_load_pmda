@@ -85,11 +85,12 @@ def test_package_inserts_parser(mock_read_pdf, mocker):
     dummy_pdf_path = Path("dummy.pdf")
 
     # Act
-    result_df = parser.parse(dummy_pdf_path)
+    result_dfs = parser.parse(dummy_pdf_path)
 
     # Assert
-    assert not result_df.empty
-    pd.testing.assert_frame_equal(result_df, mock_df)
+    assert isinstance(result_dfs, list)
+    assert len(result_dfs) == 1
+    pd.testing.assert_frame_equal(result_dfs[0], mock_df)
     mock_read_pdf.assert_called_once_with(dummy_pdf_path, pages="all", multiple_tables=True, lattice=True)
 
 
@@ -101,7 +102,7 @@ def test_package_inserts_transformer():
     transformer = PackageInsertsTransformer(source_url=source_url)
 
     # Act
-    transformed_df = transformer.transform(raw_df)
+    transformed_df = transformer.transform([raw_df])
 
     # Assert
     assert len(transformed_df) == 1

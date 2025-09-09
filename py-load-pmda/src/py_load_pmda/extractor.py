@@ -262,3 +262,82 @@ class PackageInsertsExtractor(BaseExtractor):
 
         print(f"Downloaded {len(downloaded_data)} package insert(s).")
         return downloaded_data, all_new_states
+
+
+class ReviewReportsExtractor(BaseExtractor):
+    """
+    Extracts Review Reports from the PMDA search portal.
+    """
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # The POST request goes to a URL without a trailing slash.
+        self.search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
+
+    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Tuple[Path, str]], dict]:
+        """
+        Main extraction method for review reports.
+        It searches for each drug name and downloads the corresponding review report PDF.
+
+        Returns:
+            A tuple containing:
+            - A list of tuples, where each inner tuple is (file_path, source_url).
+            - A dictionary containing the new state for delta checking.
+        """
+        print("--- Review Reports Extractor ---")
+        downloaded_data = []
+        all_new_states = {}
+
+        for name in drug_names:
+            print(f"Searching for review report for drug: '{name}'")
+
+            # This payload is based on reverse-engineering the search form.
+            # "7" is the value for "審査報告書／再審査報告書／最適使用推進ガイドライン等"
+            form_data = {
+                "nameWord": name,
+                "dispColumnsList[0]": "7",
+                "_dispColumnsList[0]": "on",
+                "nccharset": "EBBEE281",
+                "tglOpFlg": "",
+                "isNewReleaseDisp": "true",
+                "listCategory": ""
+            }
+
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+                "Referer": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/"
+            }
+
+            try:
+                # Step 1: POST to the search form to get the results page
+                print(f"Submitting search form for '{name}'...")
+                response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                response.encoding = response.apparent_encoding
+                soup = BeautifulSoup(response.text, "html.parser")
+
+                # Step 2: Find the first PDF download link on the results page.
+                main_content = soup.find("div", id="ContentMainArea")
+                if not main_content:
+                    print(f"Could not find main content area on results page for '{name}'. Skipping.")
+                    continue
+
+                link = main_content.find("a", href=lambda href: href and ".pdf" in href)
+
+                if not link or not link.has_attr("href"):
+                    print(f"Could not find a PDF download link for '{name}'. Skipping.")
+                    continue
+
+                download_url = urljoin("https://www.pmda.go.jp", link["href"])
+                print(f"Found download link: {download_url}")
+
+                # Step 3: Download the file
+                file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
+                if file_path and file_path.exists():
+                    downloaded_data.append((file_path, download_url))
+                    all_new_states[download_url] = self.new_state
+
+            except requests.RequestException as e:
+                print(f"Failed to process '{name}': {e}")
+                continue
+
+        print(f"Downloaded {len(downloaded_data)} review report(s).")
+        return downloaded_data, all_new_states

@@ -67,6 +67,7 @@ def test_run_package_inserts_success(mocker):
     })
     mock_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter").return_value
     mock_db_adapter.get_latest_state.return_value = {} # Assume no prior state
+    mock_db_adapter.execute_sql = mocker.MagicMock() # Mock the missing method
 
     # Mock the ETL classes and schema definitions
     mocker.patch("py_load_pmda.cli.schemas.DATASET_SCHEMAS", {
@@ -93,8 +94,8 @@ def test_run_package_inserts_success(mocker):
     mock_source_url = "https://example.com/test.pdf"
     mock_extractor.extract.return_value = ([(mock_file_path, mock_source_url)], {"state": "new"})
 
-    # The parser returns a dummy DataFrame
-    mock_parser.parse.return_value = pd.DataFrame({"data": [1]})
+    # The parser returns a list containing a dummy DataFrame
+    mock_parser.parse.return_value = [pd.DataFrame({"data": [1]})]
 
     # 3. Invoke the CLI runner
     result = runner.invoke(app, [

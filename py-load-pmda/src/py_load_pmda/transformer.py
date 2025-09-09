@@ -1,5 +1,6 @@
 import pandas as pd
 import json
+from typing import List
 import hashlib
 from datetime import datetime, timezone
 from importlib.metadata import version
@@ -39,21 +40,21 @@ class ApprovalsTransformer:
 
         return extracted[['brand_name_jp', 'applicant_name_jp']]
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, dfs: List[pd.DataFrame]) -> pd.DataFrame:
         """
-        Transforms the raw DataFrame to match the target schema.
+        Transforms the raw DataFrames to match the target schema.
 
         Args:
-            df: The raw DataFrame from the parser.
+            dfs: A list of raw DataFrames from the parser.
 
         Returns:
             A transformed DataFrame ready for loading.
         """
-        if df.empty:
+        if not dfs:
             return pd.DataFrame()
 
-        # Create a copy to avoid SettingWithCopyWarning
-        df = df.copy()
+        # Concatenate all dataframes into one
+        df = pd.concat(dfs, ignore_index=True)
 
         # 1. Create the raw_data_full column for auditability
         df['raw_data_full'] = df.to_json(orient='records', lines=True).splitlines()
@@ -247,28 +248,34 @@ class PackageInsertsTransformer:
     def __init__(self, source_url: str):
         self.source_url = source_url
 
-    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
         """
-        Transforms the raw DataFrame to match a generic document schema.
+        Transforms the raw DataFrames to match a generic document schema.
 
         Since the content of the PDF tables is not yet known, this transformer
         focuses on meeting the data fidelity requirements of the FRD by storing
         the entire raw content in a JSONB-compatible column and adding metadata.
 
         Args:
-            df: The raw DataFrame from the PackageInsertsParser.
+            dfs: A list of raw DataFrames from the PackageInsertsParser.
 
         Returns:
             A transformed, single-row DataFrame ready for loading.
         """
-        if df.empty:
+        if not dfs:
             return pd.DataFrame()
+
+        # Concatenate all tables into one DataFrame for easier serialization
+        full_df = pd.concat(dfs, ignore_index=True)
+        # Convert all data to string to prevent JSON serialization errors with mixed types
+        full_df = full_df.astype(str)
+
 
         # 1. Create the 'raw_data_full' JSONB object
         # This captures all the extracted tables in a structured way.
         raw_data_full = {
             "source_file_type": "pdf",
-            "extracted_tables": df.to_dict(orient='records')
+            "extracted_tables": full_df.to_dict(orient='records')
         }
         raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
 
@@ -283,6 +290,70 @@ class PackageInsertsTransformer:
             "_meta_source_url": self.source_url,
             "_meta_extraction_ts_utc": datetime.now(timezone.utc),
             "_meta_load_ts_utc": datetime.now(timezone.utc), # Placeholder, will be updated at load time
+            "_meta_pipeline_version": version("py-load-pmda"),
+            "_meta_source_content_hash": hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
+        }
+
+        final_df = pd.DataFrame([transformed_data])
+
+        # 4. Define and order final columns
+        final_columns = [
+            'document_id',
+            'raw_data_full',
+            '_meta_source_url',
+            '_meta_extraction_ts_utc',
+            '_meta_load_ts_utc',
+            '_meta_pipeline_version',
+            '_meta_source_content_hash'
+        ]
+        return final_df[final_columns]
+
+
+class ReviewReportsTransformer:
+    """
+    Transforms a list of raw DataFrames from a Review Report PDF into a standardized format.
+    """
+    def __init__(self, source_url: str):
+        self.source_url = source_url
+
+    def transform(self, dfs: list[pd.DataFrame]) -> pd.DataFrame:
+        """
+        Transforms the raw DataFrames to match a generic document schema.
+
+        This transformer captures all extracted tables into a single JSONB-compatible
+        column for data fidelity, as required by the FRD.
+
+        Args:
+            dfs: A list of raw DataFrames from the ReviewReportsParser.
+
+        Returns:
+            A transformed, single-row DataFrame ready for loading.
+        """
+        if not dfs:
+            return pd.DataFrame()
+
+        # Concatenate all tables into one DataFrame for easier serialization
+        full_df = pd.concat(dfs, ignore_index=True)
+        # Convert all data to string to prevent JSON serialization errors with mixed types
+        full_df = full_df.astype(str)
+
+        # 1. Create the 'raw_data_full' JSONB object
+        raw_data_full = {
+            "source_file_type": "pdf",
+            "extracted_tables": full_df.to_dict(orient='records')
+        }
+        raw_data_full_json = json.dumps(raw_data_full, ensure_ascii=False)
+
+        # 2. Create a primary key for the document using a hash of the source URL
+        document_id = hashlib.sha256(self.source_url.encode('utf-8')).hexdigest()
+
+        # 3. Create the single-row DataFrame for loading
+        transformed_data = {
+            "document_id": document_id,
+            "raw_data_full": raw_data_full_json,
+            "_meta_source_url": self.source_url,
+            "_meta_extraction_ts_utc": datetime.now(timezone.utc),
+            "_meta_load_ts_utc": datetime.now(timezone.utc),
             "_meta_pipeline_version": version("py-load-pmda"),
             "_meta_source_content_hash": hashlib.sha256(raw_data_full_json.encode('utf-8')).hexdigest()
         }
