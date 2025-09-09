@@ -59,11 +59,14 @@ def mock_pmda_search(mocker):
 def test_package_inserts_extractor(mock_pmda_search, tmp_path):
     """Tests the PackageInsertsExtractor logic."""
     extractor = PackageInsertsExtractor(cache_dir=str(tmp_path))
-    downloaded_files, new_state = extractor.extract(drug_names=["some_drug"], last_state={})
+    downloaded_data, new_state = extractor.extract(drug_names=["some_drug"], last_state={})
 
-    assert len(downloaded_files) == 1
-    assert downloaded_files[0].name == "dummy_insert.pdf"
-    assert downloaded_files[0].read_bytes() == b"dummy pdf content"
+    assert len(downloaded_data) == 1
+    file_path, source_url = downloaded_data[0]
+
+    assert file_path.name == "dummy_insert.pdf"
+    assert file_path.read_bytes() == b"dummy pdf content"
+    assert source_url == "https://www.pmda.go.jp/drugs/2023/dummy_insert.pdf"
     assert "https://www.pmda.go.jp/drugs/2023/dummy_insert.pdf" in new_state
 
 

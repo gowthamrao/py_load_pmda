@@ -191,13 +191,18 @@ class PackageInsertsExtractor(BaseExtractor):
         # The POST request goes to a URL without a trailing slash.
         self.search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
 
-    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Path], dict]:
+    def extract(self, drug_names: List[str], last_state: dict) -> Tuple[List[Tuple[Path, str]], dict]:
         """
         Main extraction method for package inserts.
         It searches for each drug name and downloads the corresponding package insert PDF.
+
+        Returns:
+            A tuple containing:
+            - A list of tuples, where each inner tuple is (file_path, source_url).
+            - A dictionary containing the new state for delta checking.
         """
         print("--- Package Inserts Extractor ---")
-        downloaded_files = []
+        downloaded_data = []
         all_new_states = {}
 
         for name in drug_names:
@@ -248,12 +253,12 @@ class PackageInsertsExtractor(BaseExtractor):
                 # ETag checking will prevent re-downloads if the file is unchanged.
                 file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
                 if file_path and file_path.exists():
-                    downloaded_files.append(file_path)
+                    downloaded_data.append((file_path, download_url))
                     all_new_states[download_url] = self.new_state
 
             except requests.RequestException as e:
                 print(f"Failed to process '{name}': {e}")
                 continue
 
-        print(f"Downloaded {len(downloaded_files)} package insert(s).")
-        return downloaded_files, all_new_states
+        print(f"Downloaded {len(downloaded_data)} package insert(s).")
+        return downloaded_data, all_new_states
