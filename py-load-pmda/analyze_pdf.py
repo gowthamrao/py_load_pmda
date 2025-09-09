@@ -1,7 +1,8 @@
 import logging
-from pathlib import Path
-import pandas as pd
 import sys
+from pathlib import Path
+
+import pandas as pd
 
 # Add the src directory to the Python path to allow imports from py_load_pmda
 sys.path.insert(0, 'src')

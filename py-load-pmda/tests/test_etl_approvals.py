@@ -1,6 +1,7 @@
 
-from typing import Any, Dict, List, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import pandas as pd
 import pytest
 from py_load_pmda.extractor import ApprovalsExtractor

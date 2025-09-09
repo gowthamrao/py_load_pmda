@@ -1,6 +1,7 @@
 
 from pathlib import Path
 from typing import Any
+
 import pytest
 from py_load_pmda.extractor import BaseExtractor
 

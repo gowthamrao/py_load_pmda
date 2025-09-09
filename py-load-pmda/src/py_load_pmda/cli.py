@@ -2,10 +2,11 @@ import logging
 from typing import Any, Dict, List, Optional, Type, cast
 
 import typer
+
 from py_load_pmda import extractor, parser, schemas, transformer
-from py_load_pmda.extractor import BaseExtractor
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 from py_load_pmda.config import load_config
+from py_load_pmda.extractor import BaseExtractor
 from py_load_pmda.logging_config import setup_logging
 
 app = typer.Typer()
@@ -58,7 +59,7 @@ def init_db() -> None:
         adapter.ensure_schema(schemas.INGESTION_STATE_SCHEMA)
         adapter.commit()
         logging.info("✅ Database initialization complete.")
-    except (FileNotFoundError, ConnectionError, ValueError) as e:
+    except (FileNotFoundError, ConnectionError, ValueError):
         if adapter:
             adapter.rollback()
         logging.error("❌ Database initialization failed", exc_info=True)
@@ -267,7 +268,7 @@ def run(
         # 9. Update State
         logging.info(f"✅ ETL run for dataset '{dataset}' completed successfully.")
 
-    except Exception as e:
+    except Exception:
         logging.error(f"❌ ETL run failed for dataset '{dataset}'", exc_info=True)
         if adapter:
             adapter.rollback()
@@ -310,7 +311,7 @@ def status() -> None:
         # so we log it directly. The JSON formatter will handle the structure.
         logging.info(df.to_string())
 
-    except Exception as e:
+    except Exception:
         logging.error("❌ Failed to get status", exc_info=True)
         raise typer.Exit(code=1)
     finally:
@@ -340,7 +341,7 @@ def check_config() -> None:
         adapter.connect(db_config)
         adapter.commit() # Test transaction
         logging.info("✅ Configuration check passed. Database connection successful.")
-    except (FileNotFoundError, ConnectionError, ValueError, NotImplementedError) as e:
+    except (FileNotFoundError, ConnectionError, ValueError, NotImplementedError):
         if adapter:
             adapter.rollback()
         logging.error("❌ Configuration check failed", exc_info=True)

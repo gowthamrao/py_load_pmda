@@ -1,4 +1,5 @@
 from typing import Any, Dict
+
 import pandas as pd
 import psycopg2
 import pytest

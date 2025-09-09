@@ -1,5 +1,7 @@
 import unittest
+
 from py_load_pmda.parser import BasePDFParser, PackageInsertsParser, ReviewReportsParser
+
 
 class TestParserRefactoring(unittest.TestCase):
 

@@ -1,4 +1,5 @@
 from typing import Any
+
 import pytest
 from psycopg2 import sql
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter

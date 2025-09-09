@@ -1,8 +1,8 @@
 import pandas as pd
 import pytest
-from typer.testing import CliRunner
 from py_load_pmda.cli import app
 from py_load_pmda.config import load_config
+from typer.testing import CliRunner
 
 runner = CliRunner()
 
