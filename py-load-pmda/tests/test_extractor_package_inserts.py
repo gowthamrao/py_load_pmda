@@ -10,7 +10,7 @@ MOCK_SEARCH_RESULTS_HTML = """
 <head><title>Search Results</title></head><body>
 <div id="ContentMainArea">
     <h3>Search Results: 3 items</h3>
-    <table class="results-table">
+    <table class="result_list_table">
         <tbody>
             <tr>
                 <td>Brand Name</td>
@@ -49,9 +49,12 @@ MOCK_SEARCH_RESULTS_HTML = """
 @pytest.fixture
 def mock_pmda_search(requests_mock: requests_mock.Mocker) -> None:
     """Fixture to mock PMDA search and download requests."""
+    search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
+    # Mock the initial GET request to fetch the token
+    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
     # Mock the search POST request
     requests_mock.post(
-        "https://www.pmda.go.jp/PmdaSearch/iyakuSearch",
+        search_url,
         text=MOCK_SEARCH_RESULTS_HTML
     )
     # Mock the download GET requests for each potential PDF
