@@ -3,43 +3,56 @@ from pathlib import Path
 import zipfile
 import io
 from typing import Dict, List
-import tabula
+import pdfplumber
+from typing import Tuple
 from py_load_pmda import utils
+
 
 class PackageInsertsParser:
     """
-    Parses downloaded Package Insert PDF files using tabula-py.
+    Parses downloaded Package Insert PDF files using pdfplumber.
     """
-    def parse(self, file_path: Path) -> List[pd.DataFrame]:
+
+    def parse(self, file_path: Path) -> Tuple[str, List[pd.DataFrame]]:
         """
-        Parses the PDF file and returns a list of pandas DataFrames.
+        Parses the PDF file, extracting full text and all tables.
 
         Args:
             file_path: The path to the PDF file.
 
         Returns:
-            A list of DataFrames, where each DataFrame represents a table from the PDF.
+            A tuple containing:
+            - A string with the full text content of the PDF.
+            - A list of DataFrames, where each DataFrame is a table from the PDF.
         """
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
 
-        print(f"Parsing PDF file: {file_path}")
+        print(f"Parsing PDF with pdfplumber: {file_path}")
+        full_text = []
+        all_tables = []
+
         try:
-            # Read all tables from all pages of the PDF
-            tables = tabula.read_pdf(file_path, pages="all", multiple_tables=True, lattice=True)
+            with pdfplumber.open(file_path) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    print(f"  - Processing page {i + 1}/{len(pdf.pages)}")
+                    # Extract text from the page
+                    page_text = page.extract_text()
+                    if page_text:
+                        full_text.append(page_text)
 
-            if not tables:
-                print(f"Warning: No tables found in {file_path}.")
-                return []
+                    # Extract tables from the page
+                    tables = page.extract_tables()
+                    for table in tables:
+                        if table:
+                            df = pd.DataFrame(table[1:], columns=table[0])
+                            all_tables.append(df)
 
-            print(f"Successfully extracted {len(tables)} tables from PDF.")
-            return tables
+            print(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
+            return "\n".join(full_text), all_tables
 
         except Exception as e:
-            # This can catch various errors, including Java not being installed,
-            # or the PDF being unparseable.
-            print(f"Error parsing PDF file {file_path}: {e}")
-            print("Please ensure you have Java installed and in your PATH for tabula-py to work.")
+            print(f"Error parsing PDF file {file_path} with pdfplumber: {e}")
             raise
 
 
@@ -179,36 +192,47 @@ class JaderParser:
 
 class ReviewReportsParser:
     """
-    Parses downloaded Review Report PDF files using tabula-py.
+    Parses downloaded Review Report PDF files using pdfplumber.
     """
-    def parse(self, file_path: Path) -> List[pd.DataFrame]:
+
+    def parse(self, file_path: Path) -> Tuple[str, List[pd.DataFrame]]:
         """
-        Parses the PDF file and returns a list of pandas DataFrames, one for each table.
+        Parses the PDF file, extracting full text and all tables.
 
         Args:
             file_path: The path to the PDF file.
 
         Returns:
-            A list of DataFrames, where each DataFrame is a table found in the PDF.
+            A tuple containing:
+            - A string with the full text content of the PDF.
+            - A list of DataFrames, where each DataFrame is a table from the PDF.
         """
         if not file_path.exists():
             raise FileNotFoundError(f"The file {file_path} does not exist.")
 
-        print(f"Parsing PDF file: {file_path}")
+        print(f"Parsing PDF with pdfplumber: {file_path}")
+        full_text = []
+        all_tables = []
+
         try:
-            # Read all tables from all pages of the PDF.
-            # `multiple_tables=True` ensures that we get a list of DataFrames
-            # if multiple tables are on a single page.
-            tables = tabula.read_pdf(file_path, pages="all", multiple_tables=True, lattice=True)
+            with pdfplumber.open(file_path) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    print(f"  - Processing page {i + 1}/{len(pdf.pages)}")
+                    # Extract text from the page
+                    page_text = page.extract_text()
+                    if page_text:
+                        full_text.append(page_text)
 
-            if not tables:
-                print(f"Warning: No tables found in {file_path}.")
-                return []
+                    # Extract tables from the page
+                    tables = page.extract_tables()
+                    for table in tables:
+                        if table:
+                            df = pd.DataFrame(table[1:], columns=table[0])
+                            all_tables.append(df)
 
-            print(f"Successfully extracted {len(tables)} tables from PDF.")
-            return tables
+            print(f"Successfully extracted {len(all_tables)} tables and text from PDF.")
+            return "\n".join(full_text), all_tables
 
         except Exception as e:
-            print(f"Error parsing PDF file {file_path}: {e}")
-            print("Please ensure you have Java installed and in your PATH for tabula-py to work.")
+            print(f"Error parsing PDF file {file_path} with pdfplumber: {e}")
             raise

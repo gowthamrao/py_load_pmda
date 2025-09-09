@@ -94,8 +94,8 @@ def test_run_package_inserts_success(mocker):
     mock_source_url = "https://example.com/test.pdf"
     mock_extractor.extract.return_value = ([(mock_file_path, mock_source_url)], {"state": "new"})
 
-    # The parser returns a list containing a dummy DataFrame
-    mock_parser.parse.return_value = [pd.DataFrame({"data": [1]})]
+    # The parser returns a tuple of (text, tables)
+    mock_parser.parse.return_value = ("dummy text", [pd.DataFrame({"data": [1]})])
 
     # 3. Invoke the CLI runner
     result = runner.invoke(app, [

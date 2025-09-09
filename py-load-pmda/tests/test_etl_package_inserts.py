@@ -70,28 +70,31 @@ def test_package_inserts_extractor(mock_pmda_search, tmp_path):
     assert "https://www.pmda.go.jp/drugs/2023/dummy_insert.pdf" in new_state
 
 
-@patch("tabula.read_pdf")
-def test_package_inserts_parser(mock_read_pdf, mocker):
-    """Tests the PackageInsertsParser logic by mocking the tabula library."""
+@patch("pdfplumber.open")
+def test_package_inserts_parser(mock_pdfplumber_open, mocker):
+    """Tests the PackageInsertsParser logic by mocking the pdfplumber library."""
     # Arrange
-    # Mock Path.exists to prevent FileNotFoundError on a dummy path
-    mocker.patch.object(Path, 'exists', return_value=True)
-
-    sample_data = {'col1': ['A', 'B'], 'col2': [1, 2]}
-    mock_df = pd.DataFrame(sample_data)
-    mock_read_pdf.return_value = [mock_df] # tabula returns a list of DataFrames
+    mock_pdf = MagicMock()
+    mock_page = MagicMock()
+    mock_page.extract_text.return_value = "This is sample text."
+    mock_page.extract_tables.return_value = [[['col1', 'col2'], ['A', 1], ['B', 2]]]
+    mock_pdf.pages = [mock_page]
+    mock_pdf.__enter__.return_value = mock_pdf
+    mock_pdfplumber_open.return_value = mock_pdf
 
     parser = PackageInsertsParser()
     dummy_pdf_path = Path("dummy.pdf")
+    mocker.patch.object(Path, 'exists', return_value=True)
 
     # Act
-    result_dfs = parser.parse(dummy_pdf_path)
+    full_text, tables = parser.parse(dummy_pdf_path)
 
     # Assert
-    assert isinstance(result_dfs, list)
-    assert len(result_dfs) == 1
-    pd.testing.assert_frame_equal(result_dfs[0], mock_df)
-    mock_read_pdf.assert_called_once_with(dummy_pdf_path, pages="all", multiple_tables=True, lattice=True)
+    assert full_text == "This is sample text."
+    assert len(tables) == 1
+    assert isinstance(tables[0], pd.DataFrame)
+    assert tables[0].columns.tolist() == ['col1', 'col2']
+    mock_pdfplumber_open.assert_called_once_with(dummy_pdf_path)
 
 
 def test_package_inserts_transformer():
@@ -99,10 +102,11 @@ def test_package_inserts_transformer():
     # Arrange
     source_url = "https://www.pmda.go.jp/drugs/2023/dummy_insert.pdf"
     raw_df = pd.DataFrame({'col1': ['A', 'B'], 'col2': [1, 2]})
+    parser_output = ("This is the full text.", [raw_df])
     transformer = PackageInsertsTransformer(source_url=source_url)
 
     # Act
-    transformed_df = transformer.transform([raw_df])
+    transformed_df = transformer.transform(parser_output)
 
     # Assert
     assert len(transformed_df) == 1
@@ -117,5 +121,7 @@ def test_package_inserts_transformer():
     import json
     raw_data = json.loads(transformed_df.iloc[0]["raw_data_full"])
     assert raw_data["source_file_type"] == "pdf"
-    assert len(raw_data["extracted_tables"]) == 2
-    assert raw_data["extracted_tables"][0]['col1'] == 'A'
+    assert raw_data["full_text"] == "This is the full text."
+    assert len(raw_data["extracted_tables"]) == 1
+    assert len(raw_data["extracted_tables"][0]) == 2
+    assert raw_data["extracted_tables"][0][0]['col1'] == 'A'
