@@ -78,11 +78,16 @@ def run(
     """
     Run an ETL process for a specific dataset defined in the config.
     """
-    # Move argument validation to the top, before any connections are made.
+    # Validate arguments before doing anything else. Fail fast.
     if dataset == "approvals" and not year:
-        raise ValueError("The '--year' option is required for the 'approvals' dataset.")
+        typer.echo("Error: The '--year' option is required for the 'approvals' dataset.", err=True)
+        raise typer.Exit(code=1)
     if dataset in ["package_inserts", "review_reports"] and not drug_name:
-        raise ValueError(f"At least one '--drug-name' option is required for the '{dataset}' dataset.")
+        typer.echo(
+            f"Error: At least one '--drug-name' option is required for the '{dataset}' dataset.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
 
     adapter = None
     status = "FAILED"
