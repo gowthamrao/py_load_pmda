@@ -4,9 +4,12 @@ from typing import Any, Dict, List, Optional, Type, cast
 import typer
 
 from py_load_pmda import extractor, parser, schemas, transformer
+from py_load_pmda.adapters.bigquery import BigQueryLoader
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
+from py_load_pmda.adapters.redshift import RedshiftAdapter
 from py_load_pmda.config import load_config
 from py_load_pmda.extractor import BaseExtractor
+from py_load_pmda.interfaces import LoaderInterface
 from py_load_pmda.logging_config import setup_logging
 
 app = typer.Typer()
@@ -35,10 +38,14 @@ AVAILABLE_TRANSFORMERS: Dict[str, Any] = {
 }
 
 
-def get_db_adapter(db_type: str) -> PostgreSQLAdapter:
+def get_db_adapter(db_type: str) -> LoaderInterface:
     """Factory function for database adapters."""
     if db_type == "postgres":
         return PostgreSQLAdapter()
+    if db_type == "redshift":
+        return RedshiftAdapter()
+    if db_type == "bigquery":
+        return BigQueryLoader()
     raise NotImplementedError(f"Database type '{db_type}' is not supported.")
 
 

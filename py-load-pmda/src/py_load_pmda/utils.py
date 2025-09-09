@@ -32,7 +32,7 @@ def to_iso_date(series: pd.Series) -> pd.Series:
         # Also handles formats like 'YYYY.MM.DD'
         dt = pd.to_datetime(d.replace('年', '-').replace('月', '-').replace('日', ''), errors='coerce')
         if pd.notna(dt):
-            return dt
+            return dt.date()
 
         # 2. If standard parsing fails, try Wareki parsing
         clean_d = d.strip().replace(" ", "").replace("　", "")
@@ -53,11 +53,11 @@ def to_iso_date(series: pd.Series) -> pd.Series:
 
         gregorian_year = era_start_year + year - 1
         try:
-            return pd.to_datetime(date(gregorian_year, month, day))
+            return date(gregorian_year, month, day)
         except ValueError:
             return pd.NaT
 
-    return series.apply(convert_single_date).dt.date  # type: ignore
+    return series.apply(convert_single_date)
 
 
 def detect_encoding(data: bytes, fallback: str = 'utf-8') -> str:
