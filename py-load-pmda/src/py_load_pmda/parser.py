@@ -4,6 +4,7 @@ import zipfile
 import io
 from typing import Dict, List
 import tabula
+from py_load_pmda import utils
 
 class PackageInsertsParser:
     """
@@ -113,7 +114,10 @@ class JaderParser:
     JADER_FILENAMES = ["DEMO", "DRUG", "REAC", "HIST"]
 
     def _read_csv_from_zip(self, zf: zipfile.ZipFile, filename_stem: str) -> pd.DataFrame:
-        """Reads a specific CSV from a zip file into a DataFrame, handling encoding."""
+        """
+        Reads a specific CSV from a zip file into a DataFrame, handling encoding
+        by automatically detecting it.
+        """
         # Find the actual filename in the zip, ignoring case. e.g., 'DEMO.csv' or 'demo.csv'
         try:
             target_filename = next(
@@ -123,12 +127,25 @@ class JaderParser:
             print(f"Warning: '{filename_stem}.csv' not found in the zip file.")
             return pd.DataFrame()
 
+        print(f"Reading '{target_filename}' from zip...")
         try:
-            with zf.open(target_filename) as csv_file:
-                # Critical: JADER files use Shift-JIS encoding.
-                return pd.read_csv(csv_file, encoding="shift_jis")
+            # Read the file as raw bytes first to detect encoding
+            file_bytes = zf.read(target_filename)
+
+            if not file_bytes:
+                print(f"Warning: '{target_filename}' is empty.")
+                return pd.DataFrame()
+
+            # Use the utility to detect the encoding, with a fallback to Shift-JIS
+            # for JADER files, as it's the most likely encoding.
+            encoding = utils.detect_encoding(file_bytes, fallback='shift_jis')
+
+            # Use the detected encoding to read the CSV into a DataFrame
+            # We use io.BytesIO to treat the byte string as a file
+            return pd.read_csv(io.BytesIO(file_bytes), encoding=encoding)
+
         except Exception as e:
-            print(f"Error reading '{target_filename}' from zip: {e}")
+            print(f"Error reading or parsing '{target_filename}' from zip: {e}")
             return pd.DataFrame()
 
     def parse(self, file_path: Path) -> Dict[str, pd.DataFrame]:

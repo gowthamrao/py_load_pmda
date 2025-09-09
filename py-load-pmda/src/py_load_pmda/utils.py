@@ -73,3 +73,33 @@ def to_iso_date(series: pd.Series) -> pd.Series:
     # any values that could not be converted into NaT (Not a Time).
     converted_series = series.apply(convert_single_date)
     return pd.to_datetime(converted_series, errors='coerce').dt.date
+
+
+import chardet
+
+def detect_encoding(data: bytes, fallback: str = 'utf-8') -> str:
+    """
+    Detects the character encoding of a byte string.
+
+    Args:
+        data: A byte string.
+        fallback: The encoding to return if detection fails or is uncertain.
+
+    Returns:
+        The detected character encoding as a string.
+    """
+    if not isinstance(data, bytes) or not data:
+        return fallback
+
+    result = chardet.detect(data)
+    encoding = result.get('encoding')
+    confidence = result.get('confidence', 0)
+
+    # If chardet is not confident, or if no encoding is found, use the fallback.
+    if confidence < 0.7 or not encoding:
+        print(f"Encoding detection uncertain (confidence: {confidence:.2f}). "
+              f"Falling back to '{fallback}'.")
+        return fallback
+
+    print(f"Detected encoding: '{encoding}' with {confidence:.2f} confidence.")
+    return encoding
