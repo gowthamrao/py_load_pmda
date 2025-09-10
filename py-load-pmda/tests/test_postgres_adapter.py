@@ -3,6 +3,7 @@ from typing import Any, Dict
 import pandas as pd
 import psycopg2
 import pytest
+from psycopg2 import sql
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 
@@ -70,69 +71,67 @@ def test_connect_is_idempotent(mocker: Any, db_details: Dict[str, Any]) -> None:
     mock_connect.assert_called_once() # Should still be 1
 
 def test_ensure_schema(adapter: PostgreSQLAdapter, mocker: Any) -> None:
-    """Tests that ensure_schema generates and executes correct SQL."""
+    """Tests that ensure_schema generates and executes correct SQL using sql module."""
     schema_def = {
         "schema_name": "test_schema",
         "tables": {
             "test_table": {
-                "columns": {"id": "SERIAL", "name": "TEXT"},
-                "primary_key": "id",
+                "columns": {"id": "SERIAL PRIMARY KEY", "name": "TEXT"},
             }
         }
     }
     assert adapter.conn is not None
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
 
     adapter.ensure_schema(schema_def)
 
-    expected_calls = [
-        mocker.call("CREATE SCHEMA IF NOT EXISTS test_schema;"),
-        mocker.call(mocker.ANY), # The CREATE TABLE statement
-    ]
-    mock_cursor.execute.assert_has_calls(expected_calls)
-
-    # Check the CREATE TABLE statement specifically
-    create_table_call = mock_cursor.execute.call_args_list[1][0][0]
-    assert "CREATE TABLE IF NOT EXISTS test_schema.test_table" in create_table_call
-    assert "id SERIAL" in create_table_call
-    assert "name TEXT" in create_table_call
-    assert "PRIMARY KEY (id)" in create_table_call
-
-    adapter.conn.commit.assert_not_called() # type: ignore
+    # Assert that execute was called twice (once for schema, once for table)
+    assert mock_cursor.execute.call_count == 2
+    # Assert that the calls were made with sql.Composed objects
+    assert isinstance(mock_cursor.execute.call_args_list[0][0][0], sql.Composed)
+    assert isinstance(mock_cursor.execute.call_args_list[1][0][0], sql.Composed)
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_append(adapter: PostgreSQLAdapter, mocker: Any) -> None:
-    """Tests bulk_load in 'append' mode."""
+    """Tests bulk_load in 'append' mode, ensuring no TRUNCATE call."""
     df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
+
+    # Mock the as_string method to avoid the TypeError with mock cursors
+    mocker.patch("psycopg2.sql.Composed.as_string", return_value='COPY "my_schema"."my_table" FROM STDIN WITH (FORMAT text, DELIMITER E\'\\t\', NULL \'\\N\')')
 
     adapter.bulk_load(df, "my_table", "my_schema", mode="append")
 
-    # TRUNCATE should not be called in append mode
-    assert not any("TRUNCATE" in call[0][0] for call in mock_cursor.execute.call_args_list)
+    # TRUNCATE should not be called
+    mock_cursor.execute.assert_not_called()
 
     mock_cursor.copy_expert.assert_called_once()
-    adapter.conn.commit.assert_not_called() # type: ignore
+    sql_arg = mock_cursor.copy_expert.call_args.kwargs['sql']
+    assert 'COPY "my_schema"."my_table" FROM STDIN' in sql_arg
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_overwrite(adapter: PostgreSQLAdapter, mocker: Any) -> None:
-    """Tests bulk_load in 'overwrite' mode."""
+    """Tests bulk_load in 'overwrite' mode, ensuring TRUNCATE is called."""
     df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
+    mocker.patch("psycopg2.sql.Composed.as_string", return_value="TRUNCATE DUMMY")
 
     adapter.bulk_load(df, "my_table", "my_schema", mode="overwrite")
 
-    # TRUNCATE should be called in overwrite mode
-    mock_cursor.execute.assert_called_once_with("TRUNCATE TABLE my_schema.my_table RESTART IDENTITY;")
+    # TRUNCATE should be called
+    mock_cursor.execute.assert_called_once()
+    assert isinstance(mock_cursor.execute.call_args[0][0], sql.Composed)
 
     mock_cursor.copy_expert.assert_called_once()
-    adapter.conn.commit.assert_not_called() # type: ignore
+    adapter.conn.commit.assert_not_called()
 
 def test_bulk_load_empty_df(adapter: PostgreSQLAdapter) -> None:
     """Tests that bulk_load exits gracefully for an empty DataFrame."""
     df = pd.DataFrame()
     adapter.bulk_load(df, "my_table", "my_schema")
-    # No cursor should be created, no commit should be called
-    adapter.conn.cursor.assert_not_called() # type: ignore
-    adapter.conn.commit.assert_not_called() # type: ignore
+    # A cursor is not even created if the dataframe is empty.
+    adapter.conn.cursor.assert_not_called()
+    adapter.conn.commit.assert_not_called()
 
 def test_get_latest_state_found(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """

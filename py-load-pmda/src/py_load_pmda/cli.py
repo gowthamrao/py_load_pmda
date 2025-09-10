@@ -24,22 +24,21 @@ def init_db() -> None:
     )
 
     logging.info("Initializing database...")
-    adapter = None
     try:
         db_config = config.get("database", {})
-        adapter = get_db_adapter(db_config.get("type", "postgres"))
-        adapter.connect(db_config)
-        adapter.ensure_schema(schemas.INGESTION_STATE_SCHEMA)
-        adapter.commit()
+        adapter_type = db_config.get("type", "postgres")
+
+        with get_db_adapter(adapter_type) as adapter:
+            adapter.connect(db_config)
+            adapter.ensure_schema(schemas.INGESTION_STATE_SCHEMA)
+            adapter.commit()
+
         logging.info("✅ Database initialization complete.")
     except (FileNotFoundError, ConnectionError, ValueError) as e:
-        if adapter:
-            adapter.rollback()
+        # The adapter's rollback is useful here if the error is mid-transaction,
+        # but the context manager will handle disconnection.
         logging.error(f"❌ Database initialization failed: {e}", exc_info=True)
         raise typer.Exit(code=1)
-    finally:
-        if adapter:
-            adapter.close()
 
 
 @app.command()
@@ -93,12 +92,14 @@ def status() -> None:
     )
 
     logging.info("--- Ingestion Status ---")
-    adapter = None
     try:
         db_config = config.get("database", {})
-        adapter = get_db_adapter(str(db_config.get("type", "postgres")))
-        adapter.connect(db_config)
-        states = adapter.get_all_states(schema=str(schemas.INGESTION_STATE_SCHEMA["schema_name"]))
+        adapter_type = db_config.get("type", "postgres")
+        schema_name = str(schemas.INGESTION_STATE_SCHEMA["schema_name"])
+
+        with get_db_adapter(adapter_type) as adapter:
+            adapter.connect(db_config)
+            states = adapter.get_all_states(schema=schema_name)
 
         if not states:
             logging.info("No ingestion state found in the database.")
@@ -107,18 +108,15 @@ def status() -> None:
         import pandas as pd
         df = pd.DataFrame(states)
         for col in ['last_run_ts_utc', 'last_successful_run_ts_utc']:
-            df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
         df.drop(columns=['last_watermark'], inplace=True, errors='ignore')
-        # For the status command, printing the dataframe is the desired output,
-        # so we log it directly. The JSON formatter will handle the structure.
+
         logging.info(df.to_string())
 
     except Exception as e:
         logging.error(f"❌ Failed to get status: {e}", exc_info=True)
         raise typer.Exit(code=1)
-    finally:
-        if adapter:
-            adapter.close()
 
 @app.command()
 def check_config() -> None:
@@ -133,7 +131,6 @@ def check_config() -> None:
     )
 
     logging.info("Checking configuration...")
-    adapter = None
     try:
         logging.info("✅ Configuration file loaded successfully.")
         db_config = config.get("database", {})
@@ -142,19 +139,16 @@ def check_config() -> None:
             raise ValueError("Database 'type' not specified in config.")
 
         logging.info(f"▶️ Database adapter type: {adapter_type}")
-        adapter = get_db_adapter(adapter_type)
-        logging.info("▶️ Attempting to connect to the database...")
-        adapter.connect(db_config)
-        adapter.commit() # Test transaction
+
+        with get_db_adapter(adapter_type) as adapter:
+            logging.info("▶️ Attempting to connect to the database...")
+            adapter.connect(db_config)
+            adapter.commit()  # Test transaction by committing the implicit "BEGIN"
+
         logging.info("✅ Configuration check passed. Database connection successful.")
     except (FileNotFoundError, ConnectionError, ValueError, NotImplementedError) as e:
-        if adapter:
-            adapter.rollback()
         logging.error(f"❌ Configuration check failed: {e}", exc_info=True)
         raise typer.Exit(code=1)
-    finally:
-        if adapter:
-            adapter.close()
 
 
 if __name__ == "__main__":

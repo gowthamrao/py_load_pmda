@@ -7,10 +7,18 @@ from testcontainers.postgres import PostgresContainer
 def pytest_ignore_collect(path, config):
     """
     Conditionally ignore test files if their dependencies are not installed.
+    This prevents ImportError during test collection if optional extras
+    like `bigquery` or `redshift` are not installed.
     """
-    if "test_redshift_adapter.py" in str(path):
-        if not importlib.util.find_spec("redshift_connector"):
-            return True  # Ignore this file
+    path_str = str(path)
+    if "test_bigquery_adapter.py" in path_str:
+        # Check for the top-level 'google' namespace package.
+        if not importlib.util.find_spec("google"):
+            return True
+    if "test_redshift_adapter.py" in path_str:
+        # Redshift needs both the connector and boto3 for S3 operations.
+        if not importlib.util.find_spec("redshift_connector") or not importlib.util.find_spec("boto3"):
+            return True
     return False
 
 
@@ -64,7 +72,8 @@ def postgres_adapter(
     try:
         yield adapter, schema_name
     finally:
-        with adapter.conn.cursor() as cursor:
-            cursor.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
-        adapter.conn.commit()
-        adapter.close()
+        if adapter.conn:
+            with adapter.conn.cursor() as cursor:
+                cursor.execute(f"DROP SCHEMA IF EXISTS {schema_name} CASCADE;")
+            adapter.conn.commit()
+        adapter.disconnect()

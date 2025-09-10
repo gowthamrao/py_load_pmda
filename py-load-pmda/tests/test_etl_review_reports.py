@@ -15,18 +15,19 @@ from typer.testing import CliRunner
 class MockDBAdapter(LoaderInterface):
     def __init__(self):
         self.connect_spy = MagicMock()
+        self.disconnect_spy = MagicMock()
         self.ensure_schema_spy = MagicMock()
         self.bulk_load_spy = MagicMock()
         self.execute_merge_spy = MagicMock()
         self.get_latest_state_spy = MagicMock(return_value={})
         self.update_state_spy = MagicMock()
         self.commit_spy = MagicMock()
-        self.close_spy = MagicMock()
         self.rollback_spy = MagicMock()
         self.execute_sql_spy = MagicMock()
         self.get_all_states_spy = MagicMock(return_value=[])
 
     def connect(self, connection_details): self.connect_spy(connection_details)
+    def disconnect(self): self.disconnect_spy()
     def ensure_schema(self, schema_definition): self.ensure_schema_spy(schema_definition)
     def bulk_load(self, data, target_table, schema, mode='append'): self.bulk_load_spy(data=data, target_table=target_table, schema=schema, mode=mode)
     def execute_merge(self, staging_table, target_table, primary_keys, schema): self.execute_merge_spy(staging_table=staging_table, target_table=target_table, primary_keys=primary_keys, schema=schema)
@@ -34,7 +35,6 @@ class MockDBAdapter(LoaderInterface):
     def update_state(self, dataset_id, state, status, schema): self.update_state_spy(dataset_id=dataset_id, state=state, status=status, schema=schema)
     def get_all_states(self, schema: str): return self.get_all_states_spy(schema=schema)
     def commit(self): self.commit_spy()
-    def close(self): self.close_spy()
     def rollback(self): self.rollback_spy()
     def execute_sql(self, query, params=None): self.execute_sql_spy(query, params)
 
@@ -110,4 +110,4 @@ def test_review_reports_pipeline_e2e(
 
     mock_db_adapter_fixture.update_state_spy.assert_called_once()
     mock_db_adapter_fixture.commit_spy.assert_called_once()
-    mock_db_adapter_fixture.close_spy.assert_called_once()
+    mock_db_adapter_fixture.disconnect_spy.assert_called_once()
