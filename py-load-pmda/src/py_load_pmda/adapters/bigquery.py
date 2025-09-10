@@ -11,7 +11,14 @@ from google.cloud import bigquery, storage
 from py_load_pmda.interfaces import LoaderInterface
 
 # A mapping from pandas/Python types to BigQuery data types
-PANDAS_TO_BIGQUERY_TYPES = {
+# A mapping from abstract or pandas types to BigQuery data types
+BIGQUERY_TYPE_MAP = {
+    # Abstract types from config
+    "JSONB": "JSON",
+    "JSON": "JSON",
+    "TEXT": "STRING",
+    "VARCHAR": "STRING",  # Assuming VARCHAR can be mapped to STRING
+    # Pandas dtypes
     "object": "STRING",
     "int64": "INT64",
     "float64": "FLOAT64",
@@ -21,10 +28,11 @@ PANDAS_TO_BIGQUERY_TYPES = {
     "date": "DATE",
 }
 
+
 STATE_TABLE_NAME = "_ingestion_state"
 
 
-class BigQueryLoader(LoaderInterface):
+class BigQueryAdapter(LoaderInterface):
     """
     LoaderInterface implementation for Google BigQuery.
     """
@@ -84,7 +92,19 @@ class BigQueryLoader(LoaderInterface):
         """Converts a dictionary of column names and types to a BigQuery schema."""
         bq_schema = []
         for col_name, col_type in columns.items():
-            bq_type = PANDAS_TO_BIGQUERY_TYPES.get(str(col_type), "STRING")
+            # col_type can be a string from YAML (e.g., "JSONB") or a pandas dtype
+            col_type_str = str(col_type).upper()
+
+            # Handle complex types like VARCHAR(100)
+            if 'VARCHAR' in col_type_str:
+                bq_type = BIGQUERY_TYPE_MAP.get("VARCHAR", "STRING")
+            else:
+                bq_type = BIGQUERY_TYPE_MAP.get(col_type_str, None)
+
+            # Fallback for pandas dtypes if no direct match
+            if bq_type is None:
+                bq_type = BIGQUERY_TYPE_MAP.get(str(col_type), "STRING")
+
             bq_schema.append(bigquery.SchemaField(col_name, bq_type))
         return bq_schema
 

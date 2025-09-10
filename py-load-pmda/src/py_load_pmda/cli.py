@@ -79,19 +79,20 @@ def run(
         raise typer.Exit(code=1)
 
 
+from rich.console import Console
+from rich.table import Table
+
 @app.command()
 def status() -> None:
     """
     Check the status of the last runs from the ingestion_state table.
     """
     config = load_config()
-    logging_config = config.get("logging", {})
-    setup_logging(
-        level=logging_config.get("level", "INFO"),
-        log_format=logging_config.get("format", "text"),
-    )
+    # Setup logging to show progress, but command output will go to stdout.
+    setup_logging(level=config.get("logging", {}).get("level", "INFO"))
 
-    logging.info("--- Ingestion Status ---")
+    console = Console()
+
     try:
         db_config = config.get("database", {})
         adapter_type = db_config.get("type", "postgres")
@@ -102,20 +103,49 @@ def status() -> None:
             states = adapter.get_all_states(schema=schema_name)
 
         if not states:
-            logging.info("No ingestion state found in the database.")
+            console.print("No ingestion state found in the database.")
             return
 
-        import pandas as pd
-        df = pd.DataFrame(states)
-        for col in ['last_run_ts_utc', 'last_successful_run_ts_utc']:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col]).dt.strftime('%Y-%m-%d %H:%M:%S')
-        df.drop(columns=['last_watermark'], inplace=True, errors='ignore')
+        table = Table(title="Ingestion Status", show_header=True, header_style="bold magenta")
+        table.add_column("Dataset ID", style="dim", width=20)
+        table.add_column("Status")
+        table.add_column("Last Run (UTC)")
+        table.add_column("Last Successful Run (UTC)")
+        table.add_column("Pipeline Version")
 
-        logging.info(df.to_string())
+        for state in sorted(states, key=lambda x: x.get('dataset_id', '')):
+            status = state.get('status', 'UNKNOWN')
+            status_style = "green" if status == "SUCCESS" else "red" if status == "FAILED" else "yellow"
+
+            def format_date(dt):
+                from datetime import datetime
+                if not dt: return ""
+                if isinstance(dt, str):
+                    # Handle ISO format with 'Z' for UTC
+                    if dt.endswith('Z'):
+                        dt = dt[:-1] + '+00:00'
+                    try:
+                        dt_obj = datetime.fromisoformat(dt)
+                        return dt_obj.strftime('%Y-%m-%d %H:%M:%S')
+                    except ValueError:
+                        return dt # Return original string if parsing fails
+                elif isinstance(dt, datetime):
+                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+                return str(dt)
+
+            table.add_row(
+                state.get('dataset_id', 'N/A'),
+                f"[{status_style}]{status}[/{status_style}]",
+                format_date(state.get('last_run_ts_utc')),
+                format_date(state.get('last_successful_run_ts_utc')),
+                state.get('pipeline_version', 'N/A')
+            )
+
+        console.print(table)
 
     except Exception as e:
-        logging.error(f"❌ Failed to get status: {e}", exc_info=True)
+        console.print(f"[bold red]❌ Failed to get status: {e}[/bold red]")
+        logging.debug("Full exception details:", exc_info=True)
         raise typer.Exit(code=1)
 
 @app.command()
