@@ -212,8 +212,8 @@ class RedshiftAdapter(LoaderInterface):
         self, staging_table: str, target_table: str, primary_keys: List[str], schema: str
     ) -> None:
         """
-        Execute a MERGE (Upsert) operation from a staging table using a
-        DELETE and INSERT pattern, which is standard for Redshift.
+        Execute a MERGE (Upsert) operation from a staging table using the
+        atomic MERGE command.
         This method does NOT commit the transaction.
         """
         if not self.conn:
@@ -223,32 +223,40 @@ class RedshiftAdapter(LoaderInterface):
 
         logging.info(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
 
-        join_condition = " AND ".join(
-            f"t.{pk} = s.{pk}" for pk in primary_keys
-        )
-
         with self.conn.cursor() as cursor:
             try:
-                # 1. Delete rows from target that exist in staging
-                delete_sql = f"""
-                DELETE FROM {schema}.{target_table} t
-                USING {schema}.{staging_table} s
-                WHERE {join_condition};
-                """
-                logging.info("Executing DELETE portion of merge...")
-                cursor.execute(delete_sql)
-                logging.info(f"{cursor.rowcount} rows deleted from target table.")
+                # Get column names from the staging table
+                cursor.execute(f"""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = '{schema}' AND table_name = '{staging_table}';
+                """)
+                table_cols = [row[0] for row in cursor.fetchall()]
 
-                # 2. Insert all rows from staging
-                insert_sql = f"""
-                INSERT INTO {schema}.{target_table}
-                SELECT * FROM {schema}.{staging_table};
-                """
-                logging.info("Executing INSERT portion of merge...")
-                cursor.execute(insert_sql)
-                logging.info(f"{cursor.rowcount} rows inserted from staging table.")
+                if not table_cols:
+                    logging.warning(f"Staging table '{schema}.{staging_table}' has no columns or does not exist. Skipping merge.")
+                    return
 
-                logging.info("Successfully merged data.")
+                # Construct the MERGE statement
+                on_clause = " AND ".join([f"target.{pk} = source.{pk}" for pk in primary_keys])
+                update_cols = [col for col in table_cols if col not in primary_keys]
+                update_clause = ", ".join([f"{col} = source.{col}" for col in update_cols])
+                insert_clause_cols = ", ".join(table_cols)
+                insert_clause_values = ", ".join([f"source.{col}" for col in table_cols])
+
+                merge_sql = f"""
+                    MERGE INTO {schema}.{target_table} AS target
+                    USING {schema}.{staging_table} AS source
+                    ON {on_clause}
+                    WHEN MATCHED THEN
+                        UPDATE SET {update_clause}
+                    WHEN NOT MATCHED THEN
+                        INSERT ({insert_clause_cols}) VALUES ({insert_clause_values});
+                """
+
+                logging.info("Executing MERGE statement...")
+                cursor.execute(merge_sql)
+                logging.info(f"Successfully merged data. {cursor.rowcount} rows affected.")
 
             except redshift_connector.Error as e:
                 logging.error(f"Error during merge operation: {e}")
