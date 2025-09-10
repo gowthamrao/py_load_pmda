@@ -9,6 +9,15 @@ logging:
   # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
   level: "INFO"
 
+# Alerting configuration. Defines where to send alerts on critical failures.
+alerting:
+  # A list of alerters to use.
+  - type: "log" # The "log" alerter writes messages to the standard log at ERROR level.
+  # Example for a future email alerter:
+  # - type: "email"
+  #   to: "on-call-team@example.com"
+  #   subject_prefix: "[PMDA ETL]"
+
 database:
   # The type of database adapter to use.
   # Options: "postgres", "redshift", "bigquery"
@@ -50,6 +59,21 @@ datasets:
     load_mode: "overwrite" # or "append", "merge"
     primary_key: ["approval_id"] # for merge mode
 
+    # Data quality validation rules to be applied after transformation.
+    validation:
+      - column: "approval_id"
+        check: "not_null"
+      - column: "approval_id"
+        check: "is_unique"
+      - column: "approval_date"
+        check: "not_null"
+      - column: "approval_date"
+        check: "has_type"
+        type: "datetime"
+      - column: "application_type"
+        check: "is_in_set"
+        allowed_values: ["医薬品", "医療機器", "再生医療等製品", "体外診断用医薬品"]
+
   jader:
     extractor: "JaderExtractor"
     parser: "JaderParser"
@@ -62,6 +86,9 @@ datasets:
     tables:
       jader_demo:
         primary_key: ["identification_number"]
+        validation:
+          - column: "identification_number"
+            check: "not_null"
       jader_drug:
         primary_key: ["drug_id"]
       jader_reac:

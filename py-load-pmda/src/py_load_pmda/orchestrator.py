@@ -5,9 +5,11 @@ from py_load_pmda import extractor, parser, schemas, transformer
 from py_load_pmda.adapters.bigquery import BigQueryLoader
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 from py_load_pmda.adapters.redshift import RedshiftAdapter
+from py_load_pmda.alerting import AlertManager
 from py_load_pmda.extractor import BaseExtractor
 from py_load_pmda.interfaces import LoaderInterface
 from py_load_pmda.logging_config import setup_logging
+from py_load_pmda.validator import DataValidator
 
 # --- ETL Class Registries ---
 AVAILABLE_EXTRACTORS: Dict[str, Type[BaseExtractor]] = {
@@ -68,7 +70,16 @@ class Orchestrator:
             level=logging_config.get("level", "INFO"),
             log_format=logging_config.get("format", "text"),
         )
+
+        alerting_config = self.config.get("alerting", [])
+        self.alert_manager = AlertManager(alerting_config)
+
         logging.info(f"Orchestrator initialized for dataset '{self.dataset}'.")
+
+    def _handle_error(self, message: str, subject: str) -> None:
+        """Centralized error handling and alerting."""
+        logging.error(message, exc_info=True)
+        self.alert_manager.send(message, subject=subject)
 
     def run(self) -> None:
         """
@@ -152,11 +163,13 @@ class Orchestrator:
 
             logging.info(f"✅ ETL run for dataset '{self.dataset}' completed successfully.")
 
-        except Exception:
-            logging.error(f"❌ ETL run failed for dataset '{self.dataset}'", exc_info=True)
+        except Exception as e:
+            error_message = f"ETL run failed for dataset '{self.dataset}': {e}"
+            subject = f"Critical Error in PMDA ETL Pipeline: {self.dataset}"
+            self._handle_error(error_message, subject)
             if self.adapter:
                 self.adapter.rollback()
-            raise  # Re-raise the exception to be handled by the CLI
+            raise
 
         finally:
             if self.adapter:
@@ -192,9 +205,18 @@ class Orchestrator:
         if self.adapter is None:
             raise RuntimeError("Database adapter is not initialized.")
 
+        # --- Data Validation Step ---
+        table_config = ds_config.get("tables", {}).get(table_name, ds_config)
+        validation_rules = table_config.get("validation")
+        if validation_rules:
+            logging.info(f"--- Validating data for {schema_name}.{table_name} ---")
+            validator = DataValidator(validation_rules)
+            if not validator.validate(df):
+                error_message = f"Data validation failed for table '{table_name}':\n" + "\n".join(validator.errors)
+                raise ValueError(error_message)
+
         logging.info(f"--- Loading data to {schema_name}.{table_name} (mode: {load_mode}) ---")
         if load_mode == "merge":
-            table_config = ds_config.get("tables", {}).get(table_name, ds_config)
             primary_keys = table_config.get("primary_key")
             if not primary_keys:
                 raise ValueError(f"load_mode 'merge' requires 'primary_key' in config for table '{table_name}'.")
