@@ -1,60 +1,43 @@
 import logging
-import re
-from datetime import date
 from typing import Any
 
 import chardet
+from jpdatetime import jpdatetime
 import pandas as pd
 
-# Define Japanese era start years (Gregorian)
-WAREKI_ERA_STARTS = {
-    "令和": 2019, "平成": 1989, "昭和": 1926, "大正": 1912, "明治": 1868,
-}
-
-# Regex to capture Wareki date parts.
-WAREKI_PATTERN = re.compile(
-    r"(?P<era>{eras})(?P<year>\d+|元)年"
-    r"(?P<month>\d{{1,2}})月(?P<day>\d{{1,2}})日".format(
-        eras="|".join(WAREKI_ERA_STARTS.keys())
-    )
-)
 
 def to_iso_date(series: pd.Series) -> pd.Series:
     """
     Converts a pandas Series of dates in various formats (including Japanese
-    Wareki) to ISO 8601 date objects.
+    Wareki) to ISO 8601 date objects using the jpdatetime library for robust
+    parsing.
     """
+
     def convert_single_date(d: Any) -> Any:
         if pd.isna(d) or not isinstance(d, str):
             return pd.NaT
 
-        # 1. Try standard parsing first. `errors='coerce'` handles failures gracefully.
-        # Also handles formats like 'YYYY.MM.DD'
-        dt = pd.to_datetime(d.replace('年', '-').replace('月', '-').replace('日', ''), errors='coerce')
+        # 1. Try standard `pd.to_datetime` first. It handles many common formats.
+        # The `errors='coerce'` flag will return NaT for parsing failures.
+        dt = pd.to_datetime(
+            d.replace("年", "-").replace("月", "-").replace("日", ""), errors="coerce"
+        )
         if pd.notna(dt):
             return dt.date()
 
-        # 2. If standard parsing fails, try Wareki parsing
-        clean_d = d.strip().replace(" ", "").replace("　", "")
-        match = WAREKI_PATTERN.match(clean_d)
-        if not match:
-            return pd.NaT
-
-        parts = match.groupdict()
-        era = parts["era"]
-        year_str = parts["year"]
-        month = int(parts["month"])
-        day = int(parts["day"])
-
-        year = 1 if year_str == "元" else int(year_str)
-        era_start_year = WAREKI_ERA_STARTS.get(era)
-        if not era_start_year:
-            return pd.NaT
-
-        gregorian_year = era_start_year + year - 1
+        # 2. If standard parsing fails, try Wareki parsing with jpdatetime.
+        # This library is specifically designed for Japanese era dates.
         try:
-            return date(gregorian_year, month, day)
-        except ValueError:
+            # Clean the string for parsing
+            clean_d = d.strip().replace(" ", "").replace("　", "")
+            # The format "%G年%m月%d日" interprets the era name and year together (%G).
+            # The library correctly handles "元年" for the first year of an era,
+            # as well as Arabic numerals for the year.
+            parsed_dt = jpdatetime.strptime(clean_d, "%G年%m月%d日")
+            return parsed_dt.date()
+        except (ValueError, TypeError):
+            # If jpdatetime also fails, return NaT (Not a Time)
+            logging.debug(f"Could not parse date: {d}")
             return pd.NaT
 
     return series.apply(convert_single_date)

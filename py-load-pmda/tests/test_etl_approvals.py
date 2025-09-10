@@ -75,12 +75,14 @@ def test_approvals_extractor(mock_pmda_pages: Any, tmp_path: Path) -> None:
     assert "etag" in new_state
     assert new_state["etag"] == "test-etag"
 
+from datetime import date
+
 @pytest.fixture
 def sample_raw_df() -> pd.DataFrame:
-    """Provides a sample raw DataFrame as output from the parser."""
+    """Provides a sample raw DataFrame as output from the parser, now with Wareki dates."""
     data: Dict[str, List[Any]] = {
         '分野': ['第５', '抗悪'],
-        '承認日': ['2025.5.19', '2025.5.19'],
+        '承認日': ['令和7年5月19日', '平成元年6月1日'], # Wareki dates
         'No.': [1.0, 5.0],
         '販売名(会社名、法人番号)': [
             'スリンダ錠28\n(あすか製薬㈱、9010401018375)',
@@ -93,7 +95,7 @@ def sample_raw_df() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 def test_approvals_transformer(sample_raw_df: pd.DataFrame) -> None:
-    """Tests the ApprovalsTransformer logic."""
+    """Tests the ApprovalsTransformer logic, including Wareki date conversion."""
     source_url = "https://www.pmda.go.jp/files/000276012.xlsx"
     transformer = ApprovalsTransformer(source_url=source_url)
 
@@ -108,3 +110,8 @@ def test_approvals_transformer(sample_raw_df: pd.DataFrame) -> None:
     assert transformed_df.iloc[1]['applicant_name_jp'] == 'グラクソ・スミスクライン㈱'
     assert '_meta_source_url' in transformed_df.columns
     assert transformed_df.iloc[0]['_meta_source_url'] == source_url
+
+    # Verify that the Wareki dates were correctly converted to date objects
+    assert 'approval_date' in transformed_df.columns
+    assert transformed_df.iloc[0]['approval_date'] == date(2025, 5, 19)
+    assert transformed_df.iloc[1]['approval_date'] == date(1989, 6, 1)
