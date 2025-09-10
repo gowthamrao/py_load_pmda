@@ -130,7 +130,8 @@ class Orchestrator:
             transformer_class = cast(Any, transformer_class)
 
             logging.info(f"--- Running Extractor: {ds_config['extractor']} ---")
-            extractor_instance = extractor_class()
+            extractor_settings = self.config.get("extractor_settings", {})
+            extractor_instance = extractor_class(**extractor_settings)
             extract_args: Dict[str, Any] = {"last_state": last_state}
             if self.dataset == "approvals":
                 extract_args['year'] = self.year

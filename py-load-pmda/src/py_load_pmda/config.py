@@ -86,4 +86,22 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
             config["logging"] = {}
         config["logging"]["level"] = log_level_env.upper()
 
+    # Handle extractor settings with sensible defaults
+    default_extractor_settings = {
+        "rate_limit_seconds": 1.0,
+        "retries": 3,
+        "backoff_factor": 0.5,
+    }
+
+    if "extractor_settings" in config:
+        # Merge defaults into the existing settings
+        # The settings from the file take precedence
+        merged_settings = {**default_extractor_settings, **config["extractor_settings"]}
+        config["extractor_settings"] = merged_settings
+    else:
+        # If the section doesn't exist, create it with defaults
+        config["extractor_settings"] = default_extractor_settings
+
+    logging.info(f"Extractor settings loaded: {config['extractor_settings']}")
+
     return config
