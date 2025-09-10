@@ -63,7 +63,7 @@ def test_review_reports_transformer_unit():
 
 
 # --- End-to-End Test for the CLI ---
-@patch("py_load_pmda.cli.get_db_adapter")
+@patch("py_load_pmda.orchestrator.get_db_adapter")
 @patch("py_load_pmda.extractor.BaseExtractor._send_post_request")
 @patch("py_load_pmda.extractor.BaseExtractor._download_file")
 @patch("py_load_pmda.parser.pdfplumber.open")

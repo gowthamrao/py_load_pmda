@@ -12,11 +12,8 @@ def mock_db_adapter(mocker):
     mock_adapter_instance = mocker.MagicMock()
     mock_adapter_instance.get_latest_state.return_value = {}
     mock_adapter_instance.get_all_states.return_value = []
-
-    # Mock the factory to return our magic mock
-    mocker.patch(
-        "py_load_pmda.cli.get_db_adapter", return_value=mock_adapter_instance
-    )
+    # Mock the factory where it's used by the 'run' command's orchestrator
+    mocker.patch("py_load_pmda.orchestrator.get_db_adapter", return_value=mock_adapter_instance)
     return mock_adapter_instance
 
 
@@ -26,19 +23,19 @@ def mock_etl_components(mocker):
     # Mock extractor to return a dummy file path and state
     mock_extractor_instance = mocker.MagicMock()
     mock_extractor_instance.extract.return_value = ("/path/to/dummy.zip", "http://dummy.url/jader.zip", {"etag": "new-etag"})
-    mocker.patch("py_load_pmda.cli.AVAILABLE_EXTRACTORS", {
+    mocker.patch("py_load_pmda.orchestrator.AVAILABLE_EXTRACTORS", {
         "JaderExtractor": lambda: mock_extractor_instance
     })
 
     # Mock parser to return some initial data
     mock_parser_instance = mocker.MagicMock()
-    mocker.patch("py_load_pmda.cli.AVAILABLE_PARSERS", {
+    mocker.patch("py_load_pmda.orchestrator.AVAILABLE_PARSERS", {
         "JaderParser": lambda: mock_parser_instance
     })
 
     # Mock transformer
     mock_transformer_instance = mocker.MagicMock()
-    mocker.patch("py_load_pmda.cli.AVAILABLE_TRANSFORMERS", {
+    mocker.patch("py_load_pmda.orchestrator.AVAILABLE_TRANSFORMERS", {
         "JaderTransformer": lambda **kwargs: mock_transformer_instance
     })
 
