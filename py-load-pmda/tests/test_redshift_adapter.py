@@ -111,22 +111,23 @@ class TestRedshiftAdapter:
         assert "FORMAT AS PARQUET" in copy_sql
 
     def test_execute_merge(self, redshift_adapter: RedshiftAdapter) -> None:
-        """Test the execute_merge method generates correct SQL."""
+        """Test the execute_merge method generates the correct MERGE SQL."""
         assert redshift_adapter.conn is not None
         mock_cursor = redshift_adapter.conn.cursor.return_value.__enter__.return_value
+        # Mock the return of column names for the staging table
+        mock_cursor.fetchall.return_value = [("id",), ("data",)]
 
         redshift_adapter.execute_merge("staging_table", "target_table", ["id"], "my_schema")
 
-        # Check DELETE statement
-        delete_sql = mock_cursor.execute.call_args_list[0][0][0]
-        assert "DELETE FROM my_schema.target_table t" in delete_sql
-        assert "USING my_schema.staging_table s" in delete_sql
-        assert "WHERE t.id = s.id" in delete_sql
-
-        # Check INSERT statement
-        insert_sql = mock_cursor.execute.call_args_list[1][0][0]
-        assert "INSERT INTO my_schema.target_table" in insert_sql
-        assert "SELECT * FROM my_schema.staging_table" in insert_sql
+        # Verify the generated MERGE SQL
+        merge_sql = mock_cursor.execute.call_args_list[1][0][0]
+        assert "MERGE INTO my_schema.target_table AS target" in merge_sql
+        assert "USING my_schema.staging_table AS source" in merge_sql
+        assert "ON target.id = source.id" in merge_sql
+        assert "WHEN MATCHED THEN" in merge_sql
+        assert "UPDATE SET data = source.data" in merge_sql
+        assert "WHEN NOT MATCHED THEN" in merge_sql
+        assert "INSERT (id, data) VALUES (source.id, source.data)" in merge_sql
 
     def test_update_state(self, redshift_adapter: RedshiftAdapter) -> None:
         """Test that update_state issues a DELETE and INSERT."""
