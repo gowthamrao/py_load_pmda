@@ -332,12 +332,8 @@ class ReviewReportsExtractor(BaseExtractor):
     def extract(self, drug_names: List[str], last_state: Dict[str, Any]) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
         """
         Main extraction method for review reports.
-        It searches for each drug name and downloads the corresponding review report PDF.
-
-        Returns:
-            A tuple containing:
-            - A list of tuples, where each inner tuple is (file_path, source_url).
-            - A dictionary containing the new state for delta checking.
+        It searches for each drug name, parses the results, finds links
+        containing '審査報告書', and downloads the corresponding files.
         """
         logging.info("--- Review Reports Extractor ---")
         downloaded_data = []
@@ -346,13 +342,12 @@ class ReviewReportsExtractor(BaseExtractor):
         for name in drug_names:
             logging.info(f"Searching for review report for drug: '{name}'")
 
-            # This payload is based on reverse-engineering the search form.
             # "7" is the value for "審査報告書／再審査報告書／最適使用推進ガイドライン等"
             form_data = {
                 "nameWord": name,
                 "dispColumnsList[0]": "7",
                 "_dispColumnsList[0]": "on",
-                "nccharset": "EBBEE281",
+                "nccharset": "",  # Will be updated with a real token
                 "tglOpFlg": "",
                 "isNewReleaseDisp": "true",
                 "listCategory": ""
@@ -360,11 +355,10 @@ class ReviewReportsExtractor(BaseExtractor):
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Referer": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/"
+                "Referer": f"{self.search_url}/"
             }
 
             try:
-                # Step 1: GET the search page to acquire a valid session token (nccharset)
                 logging.info("Fetching search page to get a session token...")
                 get_response = self._send_request(self.search_url)
                 get_soup = BeautifulSoup(get_response.text, "html.parser")
@@ -372,60 +366,71 @@ class ReviewReportsExtractor(BaseExtractor):
                 if not isinstance(token_tag, Tag) or not token_tag.has_attr("value"):
                     raise ValueError("Could not find the 'nccharset' token on the search page.")
 
-                nccharset_token = str(token_tag["value"])
-                logging.info(f"Acquired nccharset token: {nccharset_token}")
-                form_data["nccharset"] = nccharset_token
+                form_data["nccharset"] = str(token_tag["value"])
+                logging.info(f"Acquired nccharset token: {form_data['nccharset']}")
 
-                # Step 2: POST to the search form with the valid token
                 logging.info(f"Submitting search form for '{name}'...")
                 post_response = self._send_post_request(self.search_url, data=form_data, headers=headers)
                 post_response.encoding = post_response.apparent_encoding
                 soup = BeautifulSoup(post_response.text, "html.parser")
 
-                # Step 3: Intelligently parse the search results table to find the correct PDF.
                 main_content = soup.find("div", id="ContentMainArea")
                 if not isinstance(main_content, Tag):
                     logging.warning(f"Could not find main content area for '{name}'. Skipping.")
                     continue
 
-                # The results table now has a specific class name.
                 table = main_content.find("table", class_="result_list_table")
                 if not isinstance(table, Tag):
                     logging.warning(f"Could not find results table for '{name}'. Skipping.")
                     continue
 
-                download_url = None
                 tbody = table.find("tbody")
                 if not isinstance(tbody, Tag):
-                    tbody = table  # Fallback to the table itself
+                    tbody = table  # Fallback
 
                 rows = tbody.find_all("tr")
-                for row in rows:  # Iterate all rows in the body
+                found_links = []
+                for row in rows:
                     cells = row.find_all("td")
                     if len(cells) < 5:
                         continue
 
+                    # Looser matching for the brand name
                     brand_name = cells[0].get_text(strip=True)
-                    if name == brand_name:
-                        logging.info(f"Found exact match for '{name}' in results table.")
-                        pdf_link_tag = cells[4].find("a", href=lambda href: href and ".pdf" in href)
-                        if isinstance(pdf_link_tag, Tag) and pdf_link_tag.has_attr("href"):
-                            download_url = urljoin(self.base_url, str(pdf_link_tag["href"]))
-                            logging.info(f"Found download link: {download_url}")
-                            break
+                    if name in brand_name:
+                        logging.info(f"Found potential match for '{name}' in row with brand name '{brand_name}'.")
 
-                if not download_url:
-                    logging.warning(f"Could not find a matching PDF download link for '{name}'. Skipping.")
+                        # Find all links in the 5th cell
+                        link_cell = cells[4]
+                        report_links = link_cell.find_all("a", href=True)
+
+                        for link_tag in report_links:
+                            # Check if the link text indicates it's a review report
+                            if "審査報告書" in link_tag.get_text(strip=True):
+                                download_url = urljoin(self.base_url, str(link_tag["href"]))
+                                logging.info(f"Found review report link: {download_url}")
+                                found_links.append(download_url)
+
+                if not found_links:
+                    logging.warning(f"Could not find any review report links for '{name}'. Skipping.")
                     continue
 
-                # Step 3: Download the file
-                file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
-                if file_path and file_path.exists():
-                    downloaded_data.append((file_path, download_url))
-                    all_new_states[download_url] = self.new_state
+                # Download all found links
+                for url in found_links:
+                    # Check if we already processed this URL for this drug
+                    if url in all_new_states:
+                        continue
+
+                    file_path = self._download_file(url, last_state=last_state.get(url, {}))
+                    if file_path and file_path.exists():
+                        downloaded_data.append((file_path, url))
+                        all_new_states[url] = self.new_state
 
             except requests.RequestException as e:
                 logging.error(f"Failed to process '{name}': {e}", exc_info=True)
+                continue
+            except ValueError as e:
+                logging.error(f"A configuration or parsing error occurred for '{name}': {e}", exc_info=True)
                 continue
 
         logging.info(f"Downloaded {len(downloaded_data)} review report(s).")
