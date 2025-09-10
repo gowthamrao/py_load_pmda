@@ -122,10 +122,14 @@ class PostgreSQLAdapter(LoaderInterface):
                 cursor.execute(sql.SQL("TRUNCATE TABLE {} RESTART IDENTITY").format(full_table_name))
 
             buffer = io.StringIO()
-            data.to_csv(buffer, index=False, header=False, sep='\t', na_rep='\\N')
+            # Use the CSV format, which is more robust for complex string data.
+            # QUOTE_MINIMAL ensures that fields are only quoted if they contain
+            # the delimiter, quotechar, or lineterminator.
+            data.to_csv(buffer, index=False, header=False, sep=',', na_rep='', quoting=1) # 1 = csv.QUOTE_MINIMAL
             buffer.seek(0)
 
-            copy_sql = sql.SQL("COPY {} FROM STDIN WITH (FORMAT text, DELIMITER E'\\t', NULL '\\N')").format(full_table_name)
+            # Use FORMAT csv, which correctly handles quoted fields.
+            copy_sql = sql.SQL("COPY {} FROM STDIN WITH (FORMAT csv, HEADER false)").format(full_table_name)
 
             logging.info(f"Starting bulk load to '{full_table_name.as_string(cursor)}'...")
             cursor.copy_expert(sql=copy_sql.as_string(cursor), file=buffer)

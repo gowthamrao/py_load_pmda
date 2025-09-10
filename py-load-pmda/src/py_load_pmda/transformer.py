@@ -22,7 +22,8 @@ class ApprovalsTransformer:
     def _extract_brand_and_applicant(self, series: pd.Series) -> pd.DataFrame:
         """Extracts brand name and applicant from a combined string."""
         # Regex to capture the brand name (non-greedy) and the applicant name inside the last parentheses.
-        pattern = re.compile(r'^(.*?)\s*\(([^)]+、[^)]+)\)$', re.DOTALL)
+        # This now accepts either a Japanese or Western comma.
+        pattern = re.compile(r'^(.*?)\s*\(([^)]+[、,][^)]+)\)$', re.DOTALL)
 
         extracted = series.str.extract(pattern)
         extracted.columns = ['brand_name_jp', 'applicant_name_jp_raw']
@@ -46,27 +47,22 @@ class ApprovalsTransformer:
 
     def transform(self, dfs: List[pd.DataFrame]) -> pd.DataFrame:
         """
-        Transforms the raw DataFrames to match the target schema.
-
-        Args:
-            dfs: A list of raw DataFrames from the parser.
-
-        Returns:
-            A transformed DataFrame ready for loading.
+        Transforms the raw DataFrames to match the target schema. This involves
+        aggregating rows that share the same approval ID.
         """
         if not dfs:
             return pd.DataFrame()
 
-        # Concatenate all dataframes into one
         df = pd.concat(dfs, ignore_index=True)
 
-        # 1. Create the raw_data_full column for auditability
-        df['raw_data_full'] = df.to_json(orient='records', lines=True).splitlines()
+        # 1. Preserve original data for the raw_data_full column before any changes
+        # The `to_json` call will be done during aggregation.
+        df['original_row'] = df.to_dict(orient='records')
 
-        # 2. Rename columns based on the FRD schema
+        # 2. Rename columns
         rename_map = {
             "分野": "application_type",
-            "承認日": "approval_date",
+            "承認日": "approval_date_str", # Keep as string for now
             "No.": "approval_id",
             "販売名(会社名、法人番号)": "brand_applicant_raw",
             "成分名(下線:新有効成分)": "generic_name_jp",
@@ -74,47 +70,54 @@ class ApprovalsTransformer:
         }
         df.rename(columns=rename_map, inplace=True)
 
-        # 3. Extract brand name and applicant
+        # 3. Pre-process fields that need extraction before aggregation
         brand_applicant_df = self._extract_brand_and_applicant(df['brand_applicant_raw'])
         df['brand_name_jp'] = brand_applicant_df['brand_name_jp']
         df['applicant_name_jp'] = brand_applicant_df['applicant_name_jp']
+        df['approval_date'] = utils.to_iso_date(df['approval_date_str'])
 
-        # 4. Clean and transform data
-        # Convert approval_date to ISO 8601 format using the robust utility
-        df['approval_date'] = utils.to_iso_date(df['approval_date'])
+        # 4. Define aggregation logic
+        # For text fields, join unique, non-null values. For others, take the first.
+        agg_funcs = {
+            'application_type': 'first',
+            'approval_date': 'first',
+            'brand_name_jp': lambda x: '\n'.join(x.dropna().unique()),
+            'generic_name_jp': lambda x: '\n'.join(x.dropna().unique()),
+            'applicant_name_jp': lambda x: '\n'.join(x.dropna().unique()),
+            'indication': lambda x: '\n'.join(x.dropna().unique()),
+            # Use pandas' to_json, which correctly handles NaN -> null conversion.
+            'original_row': lambda x: pd.Series(list(x)).to_json(orient='values', force_ascii=False)
+        }
 
-        # 5. Add metadata columns
-        df['_meta_load_ts_utc'] = datetime.now(timezone.utc)
-        df['_meta_source_url'] = self.source_url
-        df['_meta_pipeline_version'] = version("py-load-pmda")
-        df['_meta_source_content_hash'] = df['raw_data_full'].apply(
+        # Select only columns that exist in the dataframe to avoid errors during aggregation
+        cols_to_agg = {k: v for k, v in agg_funcs.items() if k in df.columns}
+
+        # 5. Group by approval_id and aggregate
+        df_agg = df.groupby('approval_id').agg(cols_to_agg).reset_index()
+
+        # Rename the aggregated 'original_row' to 'raw_data_full'
+        df_agg.rename(columns={'original_row': 'raw_data_full'}, inplace=True)
+
+        # Cast approval_id to integer for correct data type
+        df_agg['approval_id'] = df_agg['approval_id'].astype(int)
+
+        # 6. Add metadata columns
+        df_agg['_meta_load_ts_utc'] = datetime.now(timezone.utc)
+        df_agg['_meta_source_url'] = self.source_url
+        df_agg['_meta_pipeline_version'] = version("py-load-pmda")
+        df_agg['_meta_source_content_hash'] = df_agg['raw_data_full'].apply(
             lambda x: hashlib.sha256(x.encode('utf-8')).hexdigest()
         )
+        df_agg['review_report_url'] = None # Add missing column
 
-        # Add missing columns from FRD schema and set to None
-        df['review_report_url'] = None
-
-        # 6. Select and order columns for the final schema
+        # 7. Select and order columns for the final schema
         final_columns = [
-            'approval_id',
-            'application_type',
-            'brand_name_jp',
-            'generic_name_jp',
-            'applicant_name_jp',
-            'approval_date',
-            'indication',
-            'review_report_url',
-            'raw_data_full',
-            '_meta_load_ts_utc',
-            '_meta_source_content_hash',
-            '_meta_source_url',
-            '_meta_pipeline_version',
+            'approval_id', 'application_type', 'brand_name_jp', 'generic_name_jp',
+            'applicant_name_jp', 'approval_date', 'indication', 'review_report_url',
+            'raw_data_full', '_meta_load_ts_utc', '_meta_source_content_hash',
+            '_meta_source_url', '_meta_pipeline_version',
         ]
-
-        # Filter for only the columns that exist in the DataFrame to avoid errors
-        existing_final_columns = [col for col in final_columns if col in df.columns]
-
-        return df[existing_final_columns]
+        return df_agg[final_columns]
 
 
 class JaderTransformer:
