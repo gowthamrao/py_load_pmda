@@ -13,58 +13,78 @@ class BaseExtractor:
     """
     A base class for extractors with robust request handling using a session.
     """
-    def __init__(self, cache_dir: str = "./cache", retries: int = 3, backoff_factor: float = 0.5) -> None:
+    def __init__(
+        self,
+        cache_dir: str = "./cache",
+        retries: int = 3,
+        backoff_factor: float = 0.5,
+        rate_limit_seconds: float = 1.0,
+    ) -> None:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.retries = retries
         self.backoff_factor = backoff_factor
+        self.rate_limit_seconds = rate_limit_seconds
         self.base_url: str = "https://www.pmda.go.jp"
         self.new_state: Dict[str, Any] = {}
         self.session = requests.Session()
-        # Set a default User-Agent for the session
         self.session.headers.update({
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         })
 
-    def _send_request(self, url: str, stream: bool = False, headers: Optional[Dict[str, str]] = None) -> requests.Response:
+    def _request_with_retries(
+        self, method: str, url: str, **kwargs: Any
+    ) -> requests.Response:
         """
-        Sends an HTTP GET request with retries and exponential backoff using a session.
+        Internal request handler with rate limiting, retries, and exponential backoff.
         """
         for attempt in range(self.retries):
             try:
-                time.sleep(1)
-                response = self.session.get(url, stream=stream, timeout=30, headers=headers)
-                response.raise_for_status()
-                return response
-            except requests.RequestException as e:
-                if attempt < self.retries - 1:
-                    wait_time = self.backoff_factor * (2 ** attempt) + random.uniform(0, 1)
-                    logging.warning(f"Request to {url} failed. Retrying in {wait_time:.2f} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    logging.error(f"Request to {url} failed after {self.retries} attempts.")
-                    raise e
-        raise requests.RequestException(f"Request to {url} failed after {self.retries} attempts.")
+                # Apply rate limiting before each request
+                time.sleep(self.rate_limit_seconds)
 
-    def _send_post_request(self, url: str, data: Dict[str, Any], headers: Optional[Dict[str, str]] = None, stream: bool = False) -> requests.Response:
-        """
-        Sends an HTTP POST request with retries and exponential backoff using a session.
-        """
-        for attempt in range(self.retries):
-            try:
-                time.sleep(1)
-                response = self.session.post(url, data=data, headers=headers, stream=stream, timeout=30)
+                request_func = getattr(self.session, method)
+                response = request_func(url, timeout=30, **kwargs)
                 response.raise_for_status()
                 return response
+
             except requests.RequestException as e:
                 if attempt < self.retries - 1:
-                    wait_time = self.backoff_factor * (2 ** attempt) + random.uniform(0, 1)
-                    logging.warning(f"POST request to {url} failed. Retrying in {wait_time:.2f} seconds...")
+                    wait_time = self.backoff_factor * (2**attempt) + random.uniform(0, 1)
+                    logging.warning(
+                        f"{method.upper()} request to {url} failed. Retrying in {wait_time:.2f} seconds..."
+                    )
                     time.sleep(wait_time)
                 else:
-                    logging.error(f"POST request to {url} failed after {self.retries} attempts.")
+                    logging.error(
+                        f"{method.upper()} request to {url} failed after {self.retries} attempts."
+                    )
                     raise e
-        raise requests.RequestException(f"POST request to {url} failed after {self.retries} attempts.")
+        # This line should be unreachable due to the raise in the else block,
+        # but it satisfies mypy and ensures a Response is always returned or an error raised.
+        raise requests.RequestException(
+            f"{method.upper()} request to {url} failed after {self.retries} attempts."
+        )
+
+    def _send_request(
+        self, url: str, stream: bool = False, headers: Optional[Dict[str, str]] = None
+    ) -> requests.Response:
+        """Sends an HTTP GET request using the robust request handler."""
+        return self._request_with_retries(
+            "get", url, stream=stream, headers=headers
+        )
+
+    def _send_post_request(
+        self,
+        url: str,
+        data: Dict[str, Any],
+        headers: Optional[Dict[str, str]] = None,
+        stream: bool = False,
+    ) -> requests.Response:
+        """Sends an HTTP POST request using the robust request handler."""
+        return self._request_with_retries(
+            "post", url, data=data, headers=headers, stream=stream
+        )
 
     def _get_page_content(self, url: str) -> BeautifulSoup:
         """Fetches and parses the content of a given URL."""

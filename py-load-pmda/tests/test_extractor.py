@@ -1,6 +1,7 @@
-
+import time
 from pathlib import Path
 from typing import Any
+from unittest.mock import call
 
 import pytest
 from py_load_pmda.extractor import BaseExtractor
@@ -111,3 +112,64 @@ def test_download_file_only_last_modified_provided(extractor: BaseExtractor, req
 
     assert file_path.exists()
     assert extractor.new_state == {"last_modified": "Tue, 15 Nov 1994 12:45:26 GMT"}
+
+
+def test_extractor_initialization_with_custom_settings(tmp_path: Path) -> None:
+    """Test that the BaseExtractor can be initialized with custom settings."""
+    custom_cache_dir = tmp_path / "custom_cache"
+    extractor = BaseExtractor(
+        cache_dir=str(custom_cache_dir),
+        retries=5,
+        backoff_factor=1.0,
+        rate_limit_seconds=2.0,
+    )
+    assert extractor.cache_dir == custom_cache_dir
+    assert extractor.retries == 5
+    assert extractor.backoff_factor == 1.0
+    assert extractor.rate_limit_seconds == 2.0
+
+def test_request_with_retries_and_rate_limiting(extractor: BaseExtractor, requests_mock: Any, mocker: Any) -> None:
+    """
+    Test the _request_with_retries method for correct rate limiting and retry logic.
+    """
+    url = "http://test.com/retry_endpoint"
+    mock_sleep = mocker.patch("time.sleep")
+
+    # Simulate a server that fails twice then succeeds
+    requests_mock.get(url, [
+        {"status_code": 500, "text": "Internal Server Error"},
+        {"status_code": 503, "text": "Service Unavailable"},
+        {"status_code": 200, "text": "Success!"},
+    ])
+
+    # Custom settings for this test
+    extractor.retries = 3
+    extractor.rate_limit_seconds = 0.1
+    extractor.backoff_factor = 0.2  # backoff will be 0.2 * (2**0) and 0.2 * (2**1)
+
+    response = extractor._request_with_retries("get", url)
+
+    assert response.status_code == 200
+    assert response.text == "Success!"
+    assert requests_mock.call_count == 3
+
+    # Check the calls to time.sleep
+    # Expected calls:
+    # 1. Rate limit sleep before 1st attempt
+    # 2. Backoff sleep after 1st failure
+    # 3. Rate limit sleep before 2nd attempt
+    # 4. Backoff sleep after 2nd failure
+    # 5. Rate limit sleep before 3rd attempt
+    sleep_calls = mock_sleep.call_args_list
+    assert len(sleep_calls) == 5
+
+    # Rate limit before 1st call
+    assert sleep_calls[0] == call(0.1)
+    # Backoff after 1st failure (0.2 * 2**0 = 0.2, plus random component)
+    assert sleep_calls[1].args[0] >= 0.2
+    # Rate limit before 2nd call
+    assert sleep_calls[2] == call(0.1)
+    # Backoff after 2nd failure (0.2 * 2**1 = 0.4, plus random component)
+    assert sleep_calls[3].args[0] >= 0.4
+    # Rate limit before 3rd (successful) call
+    assert sleep_calls[4] == call(0.1)

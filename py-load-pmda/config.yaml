@@ -19,6 +19,19 @@ alerting:
   #   token: "env(PMDA_SLACK_TOKEN)" # This syntax is hypothetical
   #   channel: "#your-alerts-channel"
 
+# Extractor settings control the behavior of web scraping and file downloads.
+# These settings help ensure "polite" scraping and robust error handling.
+extractor_settings:
+  # The time to wait (in seconds) between consecutive requests to the PMDA server.
+  rate_limit_seconds: 1.0
+
+  # The number of times to retry a failed HTTP request.
+  retries: 3
+
+  # The base factor for exponential backoff between retries.
+  # The wait time will be: backoff_factor * (2 ** (attempt - 1))
+  backoff_factor: 0.5
+
 database:
   # The type of database adapter to use.
   # Options: "postgres", "redshift", "bigquery"
