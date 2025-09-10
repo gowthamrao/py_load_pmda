@@ -201,3 +201,55 @@ def test_orchestrator_extractor_failure(
     orchestrator.alert_manager.send.assert_called_once()
     assert "ETL run failed" in orchestrator.alert_manager.send.call_args[0][0]
     mock_adapter.rollback.assert_called_once()
+
+
+@patch("py_load_pmda.orchestrator.get_db_adapter")
+@patch("py_load_pmda.extractor.BaseExtractor.extract")
+def test_orchestrator_run_xml_report_integration(
+    mock_extractor_extract,
+    mock_get_db_adapter,
+    mock_config,
+):
+    """
+    Integration test for the XML parser flow.
+    It uses the real XMLParser and BaseTransformer.
+    """
+    # Arrange
+    # Add the xml_report dataset config to the mock config
+    mock_config["datasets"]["xml_report"] = {
+        "extractor": "BaseExtractor",
+        "parser": "XMLParser",
+        "transformer": "BaseTransformer",
+        "parser_args": {"xpath": "./products/product"},
+        "table_name": "pmda_xml_reports",
+        "schema_name": "public",
+        "load_mode": "overwrite",
+    }
+    # Add the schema definition for the test
+    with patch.dict(
+        "py_load_pmda.orchestrator.schemas.DATASET_SCHEMAS",
+        {"xml_report": {"schema_name": "public", "tables": {"pmda_xml_reports": {}}}},
+    ):
+        mock_adapter = MagicMock()
+        mock_get_db_adapter.return_value = mock_adapter
+
+        # The extractor should return the path to our test fixture
+        fixture_path = Path("tests/fixtures/pmda_test_report.xml")
+        mock_extractor_extract.return_value = (fixture_path, "local_file", {"new": "state"})
+
+        mock_adapter.get_latest_state.return_value = {"old": "state"}
+
+        # Act
+        orchestrator = Orchestrator(config=mock_config, dataset="xml_report")
+        orchestrator.run()
+
+        # Assert
+        # The most important assertion: was bulk_load called with the correct data?
+        mock_adapter.bulk_load.assert_called_once()
+        call_args = mock_adapter.bulk_load.call_args[1]
+        loaded_df = call_args["data"]
+
+        assert isinstance(loaded_df, pd.DataFrame)
+        assert len(loaded_df) == 3
+        assert set(loaded_df.columns) == {"id", "name", "category", "status"}
+        assert loaded_df.iloc[2]["name"] == "DrugC"

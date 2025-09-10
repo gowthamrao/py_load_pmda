@@ -3,6 +3,7 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Union
 from importlib.metadata import version
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -372,3 +373,20 @@ class ReviewReportsTransformer:
 
         final_df = pd.DataFrame([transformed_data])
         return final_df
+
+
+class BaseTransformer:
+    """
+    A generic transformer that performs no operations and returns the data as is.
+    Useful for testing or for datasets that do not require transformation.
+    """
+    def __init__(self, source_url: Optional[str] = None):
+        # The source_url is optional to maintain a consistent interface.
+        pass
+
+    def transform(self, data: Union[pd.DataFrame, Dict[str, pd.DataFrame]]) -> Union[pd.DataFrame, Dict[str, pd.DataFrame]]:
+        """
+        Returns the input data without any modifications.
+        """
+        logging.info("Using BaseTransformer, returning data as is.")
+        return data

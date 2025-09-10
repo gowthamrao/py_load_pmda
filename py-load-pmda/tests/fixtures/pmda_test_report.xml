@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pmda_report>
+  <metadata>
+    <generated_date>2025-09-10</generated_date>
+    <report_type>TestReport</report_type>
+  </metadata>
+  <products>
+    <product id="A123">
+      <name>DrugA</name>
+      <category>CAT-1</category>
+      <status approved="true">Approved</status>
+    </product>
+    <product id="B456">
+      <name>DeviceB</name>
+      <category>CAT-2</category>
+      <status approved="false">Pending</status>
+    </product>
+    <product id="C789">
+      <name>DrugC</name>
+      <category>CAT-1</category>
+      <status approved="true">Approved</status>
+    </product>
+  </products>
+</pmda_report>

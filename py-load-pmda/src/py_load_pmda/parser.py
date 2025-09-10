@@ -70,6 +70,43 @@ class PackageInsertsParser(BasePDFParser):
     pass
 
 
+class XMLParser:
+    """
+    Parses an XML file into a pandas DataFrame using an XPath expression.
+    """
+    def __init__(self) -> None:
+        pass
+
+    def parse(self, file_path: Path, xpath: str) -> pd.DataFrame:
+        """
+        Parses the XML file and returns a pandas DataFrame based on the XPath.
+
+        Args:
+            file_path: The path to the XML file.
+            xpath: The XPath expression to select the nodes to be parsed into
+                   the DataFrame. Each node will become a row.
+
+        Returns:
+            A pandas DataFrame containing the data extracted from the XML.
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"The file {file_path} does not exist.")
+
+        if not xpath:
+            raise ValueError("An XPath expression must be provided.")
+
+        logging.info(f"Parsing XML file: {file_path} with XPath: '{xpath}'")
+        try:
+            # pandas.read_xml is a powerful function that uses lxml by default.
+            # It can handle reading attributes and nested elements directly into columns.
+            df = pd.read_xml(file_path, xpath=xpath, parser="lxml")
+            logging.info(f"Successfully parsed XML file into a DataFrame with {len(df)} rows.")
+            return df
+        except Exception as e:
+            logging.error(f"Error parsing XML file {file_path}: {e}", exc_info=True)
+            raise
+
+
 class ApprovalsParser:
     """
     Parses the downloaded New Drug Approvals Excel file.

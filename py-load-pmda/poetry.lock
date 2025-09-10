@@ -834,10 +834,9 @@ files = [
 name = "lxml"
 version = "5.4.0"
 description = "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
-optional = true
+optional = false
 python-versions = ">=3.6"
 groups = ["main"]
-markers = "extra == \"redshift\""
 files = [
     {file = "lxml-5.4.0-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:e7bc6df34d42322c5289e37e9971d6ed114e3776b45fa879f734bded9d1fea9c"},
     {file = "lxml-5.4.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:6854f8bd8a1536f8a1d9a3655e6354faa6406621cf857dc27b681b69860645c7"},
@@ -2701,4 +2700,4 @@ slack = ["slack_sdk"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.12, <4.0"
-content-hash = "a4c29dc27805a13764c67bba2565b323b7d3dd0a9e54a4d1647ff889193b0360"
+content-hash = "46267a0248f3d6b67ae66750cf2873a52ef88e09be502b3d0dbbbd362819f7ef"

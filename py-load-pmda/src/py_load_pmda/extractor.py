@@ -92,6 +92,14 @@ class BaseExtractor:
         response.encoding = response.apparent_encoding
         return BeautifulSoup(response.text, "html.parser")
 
+    def extract(self, **kwargs: Any) -> Any:
+        """
+        The main public method for an extractor. Subclasses must implement this.
+        This method should orchestrate the process of finding and downloading
+        the relevant data files.
+        """
+        raise NotImplementedError("Subclasses must implement the 'extract' method.")
+
     def _download_file(self, url: str, last_state: Optional[Dict[str, Any]] = None) -> Path:
         """
         Downloads a file, saves it to cache, and uses ETag and Last-Modified
