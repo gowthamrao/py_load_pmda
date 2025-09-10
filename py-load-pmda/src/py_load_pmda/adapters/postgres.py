@@ -208,14 +208,15 @@ class PostgreSQLAdapter(LoaderInterface):
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
 
-        query = sql.SQL("SELECT last_watermark FROM {schema}.ingestion_state WHERE dataset_id = %s;").format(
+        query = sql.SQL("SELECT * FROM {schema}.ingestion_state WHERE dataset_id = %s;").format(
             schema=sql.Identifier(schema)
         )
-        with self.conn.cursor() as cursor:
+        with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute(query, (dataset_id,))
             result = cursor.fetchone()
-            if result and result[0]:
-                return cast(Dict[str, Any], result[0])
+            if result:
+                # Convert DictRow to a plain dict
+                return dict(result)
             return {}
 
     def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
@@ -228,7 +229,7 @@ class PostgreSQLAdapter(LoaderInterface):
 
         pipeline_version = version("py-load-pmda")
         now = datetime.now(timezone.utc)
-        last_watermark = json.dumps(state)
+        last_watermark = json.dumps(state.get("last_watermark", {}))
         last_successful_ts = now if status == 'SUCCESS' else None
 
         update_sql = sql.SQL("""

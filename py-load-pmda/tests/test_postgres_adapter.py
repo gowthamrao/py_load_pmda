@@ -135,14 +135,31 @@ def test_bulk_load_empty_df(adapter: PostgreSQLAdapter) -> None:
     adapter.conn.commit.assert_not_called() # type: ignore
 
 def test_get_latest_state_found(adapter: PostgreSQLAdapter, mocker: Any) -> None:
-    """Tests retrieving an existing state."""
+    """
+    Tests retrieving an existing state.
+    This test is updated to check that a full dictionary is returned,
+    not just a part of it.
+    """
+    assert adapter.conn is not None
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
-    mock_cursor.fetchone.return_value = ({"last_run": "2025-01-01"},)
+
+    # This is what the function *should* return
+    full_expected_state = {
+        "dataset_id": "my_dataset",
+        "status": "SUCCESS",
+        "last_watermark": {"last_run": "2025-01-01"},
+    }
+
+    # For the *fixed* implementation, a DictCursor would return a DictRow object.
+    # We can simulate this by returning the dictionary directly, as dict(DictRow)
+    # is the operation being performed.
+    mock_cursor.fetchone.return_value = full_expected_state
 
     state = adapter.get_latest_state("my_dataset", schema="public")
 
-    mock_cursor.execute.assert_called_once_with(mocker.ANY, ("my_dataset",))
-    assert state == {"last_run": "2025-01-01"}
+    # Now, the fixed implementation should return the full state, and the test should pass.
+    assert state == full_expected_state
+
 
 def test_get_latest_state_not_found(adapter: PostgreSQLAdapter) -> None:
     """Tests retrieving a non-existing state."""
@@ -153,17 +170,33 @@ def test_get_latest_state_not_found(adapter: PostgreSQLAdapter) -> None:
 
     assert state == {}
 
+import json
+
 def test_update_state_success(adapter: PostgreSQLAdapter, mocker: Any) -> None:
-    """Tests updating a state with a SUCCESS status."""
+    """
+    Tests updating a state with a SUCCESS status and verifies the watermark structure.
+    """
     mocker.patch("py_load_pmda.adapters.postgres.version", return_value="0.1.0")
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
 
-    state_to_save = {"new_watermark": "abc"}
+    # This represents the full state object passed to the method
+    state_to_save = {
+        "pipeline_version": "0.1.0",
+        "last_watermark": {"timestamp": "2025-09-09"},
+    }
     adapter.update_state("my_dataset", state_to_save, "SUCCESS", schema="public")
 
     mock_cursor.execute.assert_called_once()
-    # Check that last_successful_ts is not None
     args = mock_cursor.execute.call_args[0][1]
+
+    # The 5th argument (index 4) should be the serialized `last_watermark` dict
+    saved_watermark = json.loads(args[4])
+
+    # The buggy implementation would save the whole `state_to_save` object.
+    # The correct implementation saves only the nested `last_watermark`.
+    assert saved_watermark == {"timestamp": "2025-09-09"}
+
+    # Check other parameters too
     assert args[2] is not None # last_successful_ts
     assert args[3] == "SUCCESS"
     adapter.conn.commit.assert_not_called() # type: ignore
