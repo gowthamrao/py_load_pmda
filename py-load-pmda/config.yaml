@@ -13,10 +13,11 @@ logging:
 alerting:
   # A list of alerters to use.
   - type: "log" # The "log" alerter writes messages to the standard log at ERROR level.
-  # Example for a future email alerter:
-  # - type: "email"
-  #   to: "on-call-team@example.com"
-  #   subject_prefix: "[PMDA ETL]"
+  # --- Example for Slack Alerter ---
+  # The token MUST be provided via the PMDA_SLACK_TOKEN environment variable for security.
+  # - type: "slack"
+  #   token: "env(PMDA_SLACK_TOKEN)" # This syntax is hypothetical
+  #   channel: "#your-alerts-channel"
 
 database:
   # The type of database adapter to use.
@@ -40,6 +41,9 @@ database:
   dbname: "pmda_db"
 
   # --- Connection details for BigQuery ---
+  # These settings can be overridden by environment variables:
+  # PMDA_BIGQUERY_PROJECT, PMDA_BIGQUERY_GCS_BUCKET, PMDA_BIGQUERY_LOCATION
+  #
   # project: "your-gcp-project-id"
   # gcs_bucket: "your-gcs-bucket-for-staging"
   # location: "US" # Optional: The location for your BigQuery datasets (e.g., "US", "EU")

@@ -1,35 +1,9 @@
 import logging
-from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-
-class Alerter(ABC):
-    """Abstract base class for all alerter implementations."""
-
-    @abstractmethod
-    def send(self, message: str, subject: str = "Pipeline Alert") -> None:
-        """
-        Sends an alert.
-
-        Args:
-            message: The content of the alert message.
-            subject: The subject or title of the alert.
-        """
-        pass
-
-
-class LogAlerter(Alerter):
-    """A simple alerter that writes messages to the log."""
-
-    def send(self, message: str, subject: str = "Pipeline Alert") -> None:
-        """
-        Logs the alert message at the ERROR level.
-
-        Args:
-            message: The content of the alert message.
-            subject: The subject or title of the alert.
-        """
-        logging.error(f"ALERT - {subject}: {message}")
+from py_load_pmda.alerters.base import Alerter
+from py_load_pmda.alerters.log import LogAlerter
+from py_load_pmda.alerters.slack import SlackAlerter
 
 
 class AlertManager:
@@ -43,7 +17,7 @@ class AlertManager:
 
         Args:
             config: A list of alerter configurations, e.g.,
-                    [{'type': 'log'}, {'type': 'email', 'to': '...'}]
+                    [{'type': 'log'}, {'type': 'slack', 'token': '...', 'channel': '...'}]
         """
         self.alerters: List[Alerter] = []
         if config:
@@ -51,7 +25,11 @@ class AlertManager:
                 alerter_type = alerter_config.get("type")
                 if alerter_type == "log":
                     self.alerters.append(LogAlerter())
-                # Future alerters like 'email' or 'slack' would be added here
+                elif alerter_type == "slack":
+                    try:
+                        self.alerters.append(SlackAlerter(alerter_config))
+                    except (ValueError, ImportError) as e:
+                        logging.error(f"Failed to initialize SlackAlerter: {e}")
                 else:
                     logging.warning(f"Unknown alerter type '{alerter_type}' found in config.")
 

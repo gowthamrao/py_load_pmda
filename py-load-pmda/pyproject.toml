@@ -34,6 +34,24 @@ bigquery = [
     "google-cloud-bigquery>=3.0,<4.0",
     "google-cloud-storage>=2.0,<3.0",
 ]
+slack = [
+    "slack_sdk>=3.20.0,<4.0.0"
+]
+dev = [
+    "pytest>=8.0.0,<9.0.0",
+    "pytest-mock>=3.12.0,<4.0.0",
+    "requests-mock>=1.12.1,<2.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "ruff>=0.5.5,<0.6.0",
+    "mypy>=1.11.0,<2.0.0",
+    "pandas-stubs>=2.0.0,<3.0.0",
+    "types-psycopg2>=2.9.21,<3.0.0",
+    "types-PyYAML>=6.0.12,<7.0.0",
+    "types-requests>=2.31.0,<3.0.0",
+    "types-beautifulsoup4>=4.12.0,<5.0.0",
+    "moto[s3]>=5.0.0,<6.0.0",
+    "testcontainers[postgres]>=4.13.0,<5.0.0",
+]
 
 
 [project.scripts]
@@ -41,24 +59,6 @@ py-load-pmda = "py_load_pmda.cli:app"
 
 [tool.poetry]
 packages = [{include = "py_load_pmda", from = "src"}]
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-mock = "^3.12.0"
-requests-mock = "^1.12.1"
-typer = {extras = ["all"], version = "^0.17.4"}
-psycopg2-binary = ">=2.9.9,<3.0.0"
-python-dotenv = "^1.0.0"
-ruff = "^0.5.5"
-mypy = "^1.11.0"
-pandas-stubs = "^2.0.0"
-types-psycopg2 = "^2.9.21"
-types-PyYAML = "^6.0.12"
-types-requests = "^2.31.0"
-types-beautifulsoup4 = "^4.12.0"
-boto3 = ">=1.34.0,<2.0.0"
-moto = {extras = ["s3"], version = ">=5.0.0,<6.0.0"}
-testcontainers = {extras = ["postgres"], version = "^4.13.0"}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
