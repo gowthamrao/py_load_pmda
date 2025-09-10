@@ -48,7 +48,8 @@ def fixture_path() -> Path:
 
 @pytest.fixture
 def html_fixture(fixture_path: Path) -> str:
-    with open(fixture_path / "sample_review_report_search.html", "r", encoding="utf-8") as f:
+    # Use the new, corrected fixture for the E2E test
+    with open(fixture_path / "sample_review_report_search_fixed.html", "r", encoding="utf-8") as f:
         return f.read()
 
 # --- Unit Test for the Transformer (Restored) ---
@@ -72,14 +73,14 @@ def test_review_reports_pipeline_e2e(
 ):
     """
     A true end-to-end integration test for the 'review_reports' pipeline.
+    This test now uses a corrected HTML fixture to validate the fixed extractor.
     """
     runner = CliRunner()
     mock_get_db_adapter.return_value = mock_db_adapter_fixture
     mock_post.return_value.text = html_fixture
 
-    source_url = "https://www.pmda.go.jp/drugs/2008/PDFofTempu/672260_22300AMX00557_C100_1.pdf"
-    # This time, we don't need to mock Path.exists because we can return a real path
-    # to a file that actually exists. The content doesn't matter since pdfplumber is mocked.
+    # This URL must match the link in the new fixture
+    source_url = "https://www.pmda.go.jp/drugs/2025/P20250910/report.pdf"
     dummy_pdf_path = Path(__file__).parent / "fixtures" / "sample_review_report.pdf"
     mock_download.return_value = dummy_pdf_path
 
@@ -97,8 +98,12 @@ def test_review_reports_pipeline_e2e(
     )
 
     assert result.exit_code == 0, result.stdout
+    # The schema is ensured for the main table and the staging table in merge mode
     assert mock_db_adapter_fixture.ensure_schema_spy.call_count == 2
+
+    # The merge operation should be called since the pipeline will now produce data
     mock_db_adapter_fixture.execute_merge_spy.assert_called_once()
+
     loaded_df = mock_db_adapter_fixture.bulk_load_spy.call_args.kwargs['data']
 
     record = loaded_df.iloc[0]
