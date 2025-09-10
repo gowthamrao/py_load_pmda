@@ -102,9 +102,18 @@ class Orchestrator:
             self.adapter = get_db_adapter(db_config.get("type", "postgres"))
             self.adapter.connect(db_config)
 
+            # Get the base schema definition, but override the schema name with
+            # the one from the run-specific configuration. This is crucial for
+            # test isolation, allowing tests to write to a temporary schema.
             target_schema_def = schemas.DATASET_SCHEMAS.get(self.dataset)
             if not target_schema_def:
                 raise ValueError(f"Schema for dataset '{self.dataset}' not found in schemas.py.")
+
+            # Make a deep copy to avoid modifying the global schema object
+            import copy
+            target_schema_def = copy.deepcopy(target_schema_def)
+            target_schema_def['schema_name'] = ds_config['schema_name']
+
             self.adapter.ensure_schema(target_schema_def)
 
             state_schema = str(schemas.INGESTION_STATE_SCHEMA["schema_name"])

@@ -26,7 +26,7 @@ PMDA_APPROVALS_SCHEMA = {
     "tables": {
         "pmda_approvals": {
             "columns": {
-                "approval_id": "VARCHAR(100)",
+                "approval_id": "INTEGER",
                 "application_type": "VARCHAR(50)",
                 "brand_name_jp": "TEXT",
                 "generic_name_jp": "TEXT",
