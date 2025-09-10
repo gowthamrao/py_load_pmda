@@ -130,6 +130,24 @@ datasets:
       _meta_pipeline_version: "VARCHAR(50)"
       _meta_source_content_hash: "VARCHAR(64)"
 
+  xml_report:
+    # This is a hypothetical dataset to demonstrate the XML parser.
+    # In a real scenario, the extractor would download an XML file.
+    # For this test, the orchestrator will be fed the local fixture file.
+    extractor: "BaseExtractor" # Using a generic extractor for simplicity
+    parser: "XMLParser"
+    transformer: "BaseTransformer" # Using a generic transformer
+
+    # The XMLParser requires an 'xpath' parameter to be passed to its 'parse' method.
+    # This is defined here and will be passed by the orchestrator.
+    parser_args:
+      xpath: "./products/product"
+
+    table_name: "pmda_xml_reports"
+    schema_name: "public"
+    load_mode: "overwrite"
+    primary_key: ["id"]
+
   review_reports:
     extractor: "ReviewReportsExtractor"
     parser: "ReviewReportsParser"

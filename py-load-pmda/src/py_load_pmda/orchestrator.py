@@ -14,6 +14,7 @@ AVAILABLE_EXTRACTORS: Dict[str, Type[BaseExtractor]] = {
     "JaderExtractor": extractor.JaderExtractor,
     "PackageInsertsExtractor": extractor.PackageInsertsExtractor,
     "ReviewReportsExtractor": extractor.ReviewReportsExtractor,
+    "BaseExtractor": extractor.BaseExtractor,
 }
 
 AVAILABLE_PARSERS: Dict[str, Any] = {
@@ -21,6 +22,7 @@ AVAILABLE_PARSERS: Dict[str, Any] = {
     "JaderParser": parser.JaderParser,
     "PackageInsertsParser": parser.PackageInsertsParser,
     "ReviewReportsParser": parser.ReviewReportsParser,
+    "XMLParser": parser.XMLParser,
 }
 
 AVAILABLE_TRANSFORMERS: Dict[str, Any] = {
@@ -28,6 +30,7 @@ AVAILABLE_TRANSFORMERS: Dict[str, Any] = {
     "JaderTransformer": transformer.JaderTransformer,
     "PackageInsertsTransformer": transformer.PackageInsertsTransformer,
     "ReviewReportsTransformer": transformer.ReviewReportsTransformer,
+    "BaseTransformer": transformer.BaseTransformer,
 }
 
 
@@ -154,6 +157,7 @@ class Orchestrator:
                 for file_path, source_url in downloaded_data:
                     logging.info(f"--- Processing file: {file_path.name} from {source_url} ---")
                     parser_instance = parser_class()
+                    # Generic parsing for PDF-based multi-file datasets
                     parsed_output = parser_instance.parse(file_path)
                     if not parsed_output or (not parsed_output[0] and not parsed_output[1]):
                         logging.warning(f"Parser returned no text or tables for {file_path.name}. Skipping.")
@@ -163,11 +167,12 @@ class Orchestrator:
                     self._load_data(ds_config, target_schema_def, transformed_df)
                 status = "SUCCESS"
 
-            elif self.dataset in ["approvals", "jader"]:
+            else: # Generic handler for single-file datasets like approvals, jader, and xml_report
                 file_path, source_url, _ = cast(Any, extracted_output)
                 logging.info(f"--- Running Parser: {ds_config['parser']} ---")
                 parser_instance = parser_class()
-                raw_df = parser_instance.parse(file_path)
+                parser_args = ds_config.get("parser_args", {})
+                raw_df = parser_instance.parse(file_path, **parser_args)
                 logging.info(f"--- Running Transformer: {ds_config['transformer']} ---")
                 transformer_instance = transformer_class(source_url=source_url)
                 transformed_output = transformer_instance.transform(raw_df)
