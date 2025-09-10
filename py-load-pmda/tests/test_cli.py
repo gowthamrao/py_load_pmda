@@ -116,3 +116,65 @@ def test_run_approvals_missing_year(mocker: Any) -> None:
 
     assert result.exit_code == 1
     assert "Error: At least one '--drug-name' option is required" in result.output
+
+
+def test_status_command_success(mocker: Any) -> None:
+    """
+    Tests that the 'status' command runs successfully and prints a table.
+    """
+    mocker.patch("py_load_pmda.cli.load_config", return_value={
+        "database": {"type": "postgres"},
+        "logging": {"level": "INFO"}
+    })
+    mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
+    mock_adapter_context = mock_get_db_adapter.return_value
+    mock_adapter_instance = mock_adapter_context.__enter__.return_value
+
+    # Mock the data returned by the adapter
+    mock_states = [
+        {
+            "dataset_id": "approvals",
+            "status": "SUCCESS",
+            "last_run_ts_utc": "2025-09-10T12:00:00Z",
+            "last_successful_run_ts_utc": "2025-09-10T12:00:00Z",
+            "pipeline_version": "0.1.0"
+        },
+        {
+            "dataset_id": "jader",
+            "status": "FAILED",
+            "last_run_ts_utc": "2025-09-10T11:00:00Z",
+            "last_successful_run_ts_utc": "2025-09-09T10:00:00Z",
+            "pipeline_version": "0.1.0"
+        }
+    ]
+    mock_adapter_instance.get_all_states.return_value = mock_states
+
+    result = runner.invoke(app, ["status"])
+
+    assert result.exit_code == 0
+    # Check for key elements in the rich table output.
+    # Avoid checking for exact formatting, which can be brittle.
+    output = result.stdout
+    assert "Ingestion Status" in output
+    assert "approvals" in output
+    assert "SUCCESS" in output
+    assert "jader" in output
+    assert "FAILED" in output
+    assert "2025-09-10" in output
+    assert "12:00:00" in output
+
+
+def test_status_command_no_state(mocker: Any) -> None:
+    """
+    Tests that the 'status' command handles the case where no state exists.
+    """
+    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}})
+    mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
+    mock_adapter_context = mock_get_db_adapter.return_value
+    mock_adapter_instance = mock_adapter_context.__enter__.return_value
+    mock_adapter_instance.get_all_states.return_value = []
+
+    result = runner.invoke(app, ["status"])
+
+    assert result.exit_code == 0
+    assert "No ingestion state found" in result.stdout
