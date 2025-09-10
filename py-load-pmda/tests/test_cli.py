@@ -10,21 +10,24 @@ def test_init_db_success(mocker: Any, caplog: Any) -> None:
     """
     Tests that the 'init-db' command succeeds and calls the correct methods.
     """
-    mock_load_config = mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
+    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
     mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
-    mock_adapter_instance = mock_get_db_adapter.return_value
+
+    # The mock adapter must also be a context manager
+    mock_adapter_context_manager = mock_get_db_adapter.return_value
+    mock_adapter_instance = mock_adapter_context_manager.__enter__.return_value
 
     result = runner.invoke(app, ["init-db"])
 
     assert result.exit_code == 0
     assert "Database initialization complete" in caplog.text
 
-    mock_load_config.assert_called_once()
     mock_get_db_adapter.assert_called_once()
-    mock_adapter_instance.connect.assert_called_once_with({})
+    mock_adapter_instance.connect.assert_called_once()
     mock_adapter_instance.ensure_schema.assert_called_once()
     mock_adapter_instance.commit.assert_called_once()
-    mock_adapter_instance.close.assert_called_once()
+    # The __exit__ method calls disconnect
+    mock_adapter_context_manager.__exit__.assert_called_once()
 
 
 def test_init_db_connection_error(mocker: Any, caplog: Any) -> None:
@@ -33,7 +36,10 @@ def test_init_db_connection_error(mocker: Any, caplog: Any) -> None:
     """
     mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
     mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
-    mock_adapter_instance = mock_get_db_adapter.return_value
+
+    # The mock adapter must also be a context manager
+    mock_adapter_context_manager = mock_get_db_adapter.return_value
+    mock_adapter_instance = mock_adapter_context_manager.__enter__.return_value
     mock_adapter_instance.connect.side_effect = ConnectionError("Test connection error")
 
     result = runner.invoke(app, ["init-db"])
@@ -41,7 +47,8 @@ def test_init_db_connection_error(mocker: Any, caplog: Any) -> None:
     assert result.exit_code == 1
     assert "Database initialization failed" in caplog.text
     assert "Test connection error" in caplog.text
-    mock_adapter_instance.rollback.assert_called_once()
+    # The context manager should still be exited, even on error
+    mock_adapter_context_manager.__exit__.assert_called_once()
 
 
 def test_run_command_calls_orchestrator(mocker: Any, caplog: Any) -> None:

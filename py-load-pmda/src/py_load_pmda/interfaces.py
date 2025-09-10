@@ -1,17 +1,17 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 
 
 class LoaderInterface(ABC):
     """
-    Abstract Base Class defining the contract for database loader adapters.
+    Abstract Base Class for database loader implementations.
 
     This interface ensures that any new database backend added to the system
     adheres to a standard set of operations for connecting, managing schemas,
-
-    loading data, and handling state.
+    loading data, and handling state. It also acts as a context manager
+    to ensure connections are properly handled.
     """
 
     @abstractmethod
@@ -20,8 +20,26 @@ class LoaderInterface(ABC):
         pass
 
     @abstractmethod
+    def disconnect(self) -> None:
+        """Disconnect from the target database."""
+        pass
+
+    @abstractmethod
+    def commit(self) -> None:
+        """Commit the current database transaction."""
+        pass
+
+    @abstractmethod
+    def rollback(self) -> None:
+        """Roll back the current database transaction."""
+        pass
+
+    @abstractmethod
     def ensure_schema(self, schema_definition: Dict[str, Any]) -> None:
-        """Ensure the target schema and tables exist."""
+        """
+        Ensure the target schema and tables exist.
+        This method should be executed within a transaction.
+        """
         pass
 
     @abstractmethod
@@ -31,6 +49,7 @@ class LoaderInterface(ABC):
         """
         Perform high-performance native bulk load of the data.
         Mode can be 'append' or 'overwrite'.
+        This method should be executed within a transaction.
         """
         pass
 
@@ -40,6 +59,7 @@ class LoaderInterface(ABC):
     ) -> None:
         """
         Execute a MERGE (Upsert) operation from a staging table to the target table.
+        This method should be executed within a transaction.
         """
         pass
 
@@ -50,10 +70,26 @@ class LoaderInterface(ABC):
 
     @abstractmethod
     def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
-        """Transactionally update the ingestion state after a load."""
+        """
+        Transactionally update the ingestion state after a load.
+        This method should be executed within a transaction.
+        """
         pass
 
     @abstractmethod
     def get_all_states(self, schema: str) -> List[Dict[str, Any]]:
         """Retrieve all ingestion states from the database."""
         pass
+
+    @abstractmethod
+    def execute_sql(self, query: str, params: Optional[Tuple[Any, ...]] = None) -> None:
+        """Executes an arbitrary SQL command."""
+        pass
+
+    def __enter__(self) -> "LoaderInterface":
+        """Enter the context manager, returning the instance."""
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Exit the context manager, ensuring disconnection."""
+        self.disconnect()

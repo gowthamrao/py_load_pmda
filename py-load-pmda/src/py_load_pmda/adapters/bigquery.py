@@ -55,6 +55,31 @@ class BigQueryLoader(LoaderInterface):
             logging.error(f"Failed to connect to Google Cloud: {e}")
             raise
 
+    def disconnect(self) -> None:
+        """Disconnect is a no-op for BigQuery as connections are stateless."""
+        self.client = None
+        self.gcs_client = None
+        logging.info("BigQuery and GCS clients have been cleared.")
+
+    def commit(self) -> None:
+        """Commit is a no-op for BigQuery as most operations are auto-committed."""
+        pass
+
+    def rollback(self) -> None:
+        """Rollback is a no-op for BigQuery."""
+        pass
+
+    def execute_sql(self, query: str, params: Any = None) -> None:
+        """Executes an arbitrary SQL command in BigQuery."""
+        if not self.client:
+            raise ConnectionError("Not connected. Call connect() first.")
+        # Note: BigQuery's Python client uses named parameters in the query string
+        # and a different parameter format than psycopg2. This is a simple pass-through.
+        job_config = bigquery.QueryJobConfig()
+        if params:
+            job_config.query_parameters = params
+        self.client.query(query, job_config=job_config).result()
+
     def _get_bq_schema(self, columns: Dict[str, Any]) -> List[bigquery.SchemaField]:
         """Converts a dictionary of column names and types to a BigQuery schema."""
         bq_schema = []

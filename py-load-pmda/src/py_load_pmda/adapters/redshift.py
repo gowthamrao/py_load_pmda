@@ -59,6 +59,29 @@ class RedshiftAdapter(LoaderInterface):
             logging.error(f"Error: Unable to connect to Redshift database: {e}")
             raise ConnectionError("Failed to connect to Redshift.") from e
 
+    def disconnect(self) -> None:
+        """Closes the connection to Redshift."""
+        if self.conn:
+            self.conn.close()
+            logging.info("Redshift connection closed.")
+
+    def commit(self) -> None:
+        """Commits the current transaction."""
+        if self.conn:
+            self.conn.commit()
+
+    def rollback(self) -> None:
+        """Rolls back the current transaction."""
+        if self.conn:
+            self.conn.rollback()
+
+    def execute_sql(self, query: str, params: Any = None) -> None:
+        """Executes an arbitrary SQL command."""
+        if not self.conn:
+            raise ConnectionError("Not connected. Call connect() first.")
+        with self.conn.cursor() as cursor:
+            cursor.execute(query, params)
+
     def ensure_schema(self, schema_definition: Dict[str, Any]) -> None:
         """
         Ensure the target schema and tables exist in Redshift.

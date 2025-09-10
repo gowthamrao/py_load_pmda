@@ -2,9 +2,6 @@ import logging
 from typing import Any, cast, Dict, List, Optional, Type
 
 from py_load_pmda import extractor, parser, schemas, transformer
-from py_load_pmda.adapters.bigquery import BigQueryLoader
-from py_load_pmda.adapters.postgres import PostgreSQLAdapter
-from py_load_pmda.adapters.redshift import RedshiftAdapter
 from py_load_pmda.alerting import AlertManager
 from py_load_pmda.extractor import BaseExtractor
 from py_load_pmda.interfaces import LoaderInterface
@@ -35,12 +32,18 @@ AVAILABLE_TRANSFORMERS: Dict[str, Any] = {
 
 
 def get_db_adapter(db_type: str) -> LoaderInterface:
-    """Factory function for database adapters."""
+    """
+    Factory function for database adapters.
+    Imports are done locally to avoid errors when optional dependencies are not installed.
+    """
     if db_type == "postgres":
+        from py_load_pmda.adapters.postgres import PostgreSQLAdapter
         return PostgreSQLAdapter()
     if db_type == "redshift":
+        from py_load_pmda.adapters.redshift import RedshiftAdapter
         return RedshiftAdapter()
     if db_type == "bigquery":
+        from py_load_pmda.adapters.bigquery import BigQueryLoader
         return BigQueryLoader()
     raise NotImplementedError(f"Database type '{db_type}' is not supported.")
 
@@ -176,7 +179,9 @@ class Orchestrator:
                 if status == "SUCCESS":
                     self.adapter.update_state(self.dataset, state=new_state, status=status, schema=str(schemas.INGESTION_STATE_SCHEMA["schema_name"]))
                     self.adapter.commit()
-                self.adapter.close()
+                # The adapter is a context manager, but we call disconnect for clarity
+                # in case it's used outside a `with` block in the future.
+                self.adapter.disconnect()
 
     def _load_data(self, ds_config, target_schema_def, data) -> None:
         """Helper method to handle loading data for single or multiple tables."""
