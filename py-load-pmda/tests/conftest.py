@@ -35,7 +35,7 @@ def postgres_container() -> PostgresContainer:
     The container will be automatically stopped at the end of the session.
     """
     # Using a specific, lightweight image for reproducibility
-    with PostgresContainer("postgres:15-alpine") as postgres:
+    with PostgresContainer("postgres:16-alpine") as postgres:
         yield postgres
 
 
