@@ -17,7 +17,7 @@ INGESTION_STATE_SCHEMA = {
             },
             "primary_key": "dataset_id",
         }
-    }
+    },
 }
 
 # Schema for the New Drug Approvals data
@@ -45,7 +45,7 @@ PMDA_APPROVALS_SCHEMA = {
             # approval_id is the true primary key for now.
             "primary_key": "approval_id",
         }
-    }
+    },
 }
 
 # Schema for the JADER (Japanese Adverse Drug Event Report) data
@@ -106,9 +106,9 @@ PMDA_JADER_SCHEMA = {
             "primary_key": "reac_id",
         },
         "jader_hist": {
-             "columns": {
-                "hist_id": "VARCHAR(64) NOT NULL", # A unique hash of the row
-                "identification_number": "VARCHAR(50) NOT NULL", # FK to jader_demo
+            "columns": {
+                "hist_id": "VARCHAR(64) NOT NULL",  # A unique hash of the row
+                "identification_number": "VARCHAR(50) NOT NULL",  # FK to jader_demo
                 "past_medical_history": "TEXT",
                 "raw_data_full": "JSONB",
                 "_meta_load_ts_utc": "TIMESTAMPTZ",
@@ -118,7 +118,7 @@ PMDA_JADER_SCHEMA = {
                 "_meta_source_content_hash": "VARCHAR(64)",
             },
             "primary_key": "hist_id",
-        }
+        },
     },
 }
 
@@ -138,7 +138,7 @@ PMDA_PACKAGE_INSERTS_SCHEMA = {
             },
             "primary_key": "document_id",
         }
-    }
+    },
 }
 
 
@@ -164,7 +164,7 @@ PMDA_REVIEW_REPORTS_SCHEMA = {
             },
             "primary_key": "document_id",
         }
-    }
+    },
 }
 
 

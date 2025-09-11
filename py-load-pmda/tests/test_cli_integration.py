@@ -1,13 +1,15 @@
 import os
-import pytest
+
 import psycopg2
-from typer.testing import CliRunner
+import pytest
 from testcontainers.postgres import PostgresContainer
+from typer.testing import CliRunner
 
 from py_load_pmda.cli import app
 
 # Create a single, module-scoped instance of the CLI runner
 runner = CliRunner()
+
 
 @pytest.fixture(scope="module")
 def postgres_container():
@@ -17,6 +19,7 @@ def postgres_container():
     """
     with PostgresContainer("postgres:16-alpine") as container:
         yield container
+
 
 @pytest.fixture(scope="module")
 def set_db_env_vars(postgres_container):

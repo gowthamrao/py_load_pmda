@@ -1,5 +1,6 @@
 import pytest
 import requests_mock
+
 from py_load_pmda.extractor import PackageInsertsExtractor
 
 # This mock HTML simulates a search result page with multiple similar items.
@@ -51,24 +52,22 @@ def mock_pmda_search(requests_mock: requests_mock.Mocker) -> None:
     """Fixture to mock PMDA search and download requests."""
     search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
     # Mock the initial GET request to fetch the token
-    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
-    # Mock the search POST request
-    requests_mock.post(
-        search_url,
-        text=MOCK_SEARCH_RESULTS_HTML
+    requests_mock.get(
+        search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>'
     )
+    # Mock the search POST request
+    requests_mock.post(search_url, text=MOCK_SEARCH_RESULTS_HTML)
     # Mock the download GET requests for each potential PDF
     requests_mock.get(
-        "https://www.pmda.go.jp/drugs/info/loxonin_s.pdf",
-        content=b"Loxonin S PDF content"
+        "https://www.pmda.go.jp/drugs/info/loxonin_s.pdf", content=b"Loxonin S PDF content"
     )
     requests_mock.get(
         "https://www.pmda.go.jp/drugs/info/loxonin_s_plus.pdf",
-        content=b"Loxonin S Plus PDF content"
+        content=b"Loxonin S Plus PDF content",
     )
     requests_mock.get(
         "https://www.pmda.go.jp/drugs/info/loxonin_s_premium.pdf",
-        content=b"Loxonin S Premium PDF content"
+        content=b"Loxonin S Premium PDF content",
     )
 
 

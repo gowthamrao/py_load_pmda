@@ -39,9 +39,7 @@ class SlackAlerter(Alerter):
         try:
             full_message = f"*{subject}*\n\n{message}"
             response = self.client.chat_postMessage(
-                channel=self.channel,
-                text=full_message,
-                mrkdwn=True
+                channel=self.channel, text=full_message, mrkdwn=True
             )
             assert response["ok"]
             logger.info(f"Successfully sent alert to Slack channel '{self.channel}'.")

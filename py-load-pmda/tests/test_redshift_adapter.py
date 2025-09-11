@@ -4,8 +4,9 @@ import boto3
 import pandas as pd
 import pytest
 from moto import mock_aws
-from py_load_pmda.adapters.redshift import RedshiftAdapter
 from pytest_mock import MockerFixture
+
+from py_load_pmda.adapters.redshift import RedshiftAdapter
 
 # A sample DataFrame for testing
 SAMPLE_DF = pd.DataFrame({"id": [1, 2], "data": ["test1", "test2"]})
@@ -43,6 +44,7 @@ class TestRedshiftAdapter:
         context manager, which is more reliable than the decorator.
         """
         import os
+
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_SECURITY_TOKEN"] = "testing"
@@ -106,7 +108,10 @@ class TestRedshiftAdapter:
         # Verify the COPY command
         copy_sql = mock_cursor.execute.call_args[0][0]
         assert "COPY my_schema.my_table" in copy_sql
-        assert f"FROM 's3://{REDSHIFT_CONN_DETAILS['s3_staging_bucket']}/staging/my_schema_my_table" in copy_sql
+        assert (
+            f"FROM 's3://{REDSHIFT_CONN_DETAILS['s3_staging_bucket']}/staging/my_schema_my_table"
+            in copy_sql
+        )
         assert f"IAM_ROLE '{REDSHIFT_CONN_DETAILS['iam_role']}'" in copy_sql
         assert "FORMAT AS PARQUET" in copy_sql
 
@@ -162,5 +167,5 @@ class TestRedshiftAdapter:
         assert state == {"last_file": "file.zip"}
         mock_cursor.execute.assert_called_once_with(
             "SELECT last_watermark FROM my_schema.ingestion_state WHERE dataset_id = %s;",
-            ("my_dataset",)
+            ("my_dataset",),
         )

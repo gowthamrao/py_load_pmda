@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 CONFIG_FILENAME = "config.yaml"
 ENV_PREFIX = "PMDA_DB_"
 
+
 def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     """
     Loads configuration from a YAML file and overrides with environment variables.
@@ -51,8 +52,8 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
     # Override with environment variables
     if "database" in config:
         # Iterate over a copy of keys since we might add 'password' if it's not there
-        for key in list(config["database"].keys()) + ['password']:
-             # Ensure 'password' is in the dict for env var lookup, even if not in yaml
+        for key in list(config["database"].keys()) + ["password"]:
+            # Ensure 'password' is in the dict for env var lookup, even if not in yaml
             if key not in config["database"]:
                 config["database"][key] = None
 
@@ -63,14 +64,21 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
 
                 # Don't print the password value
                 print_val = "****" if key == "password" else env_value
-                logging.info(f"Overriding config '{key}' with value from environment variable {env_var}: {print_val}")
-
+                logging.info(
+                    f"Overriding config '{key}' with value from environment variable {env_var}: {print_val}"
+                )
 
                 # Attempt to cast env var to the same type as the default value
                 try:
                     # Handle boolean case separately
                     if original_type is bool:
-                         config["database"][key] = env_value.lower() in ['true', '1', 't', 'y', 'yes']
+                        config["database"][key] = env_value.lower() in [
+                            "true",
+                            "1",
+                            "t",
+                            "y",
+                            "yes",
+                        ]
                     elif config["database"][key] is not None:
                         config["database"][key] = original_type(env_value)
                     else:

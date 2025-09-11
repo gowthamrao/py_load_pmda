@@ -55,7 +55,9 @@ class DataValidator:
             try:
                 check_method(df, **rule)
             except Exception as e:
-                self.errors.append(f"Error during validation check '{rule['check']}' on column '{column}': {e}")
+                self.errors.append(
+                    f"Error during validation check '{rule['check']}' on column '{column}': {e}"
+                )
 
         if self.errors:
             for error in self.errors:
@@ -69,9 +71,7 @@ class DataValidator:
         """Checks for null values in a column."""
         if df[column].isnull().any():
             null_count = df[column].isnull().sum()
-            self.errors.append(
-                f"Column '{column}' has {null_count} null values."
-            )
+            self.errors.append(f"Column '{column}' has {null_count} null values.")
 
     def _check_is_unique(self, df: pd.DataFrame, column: str, **kwargs: Any) -> None:
         """Checks for duplicate values in a column."""
@@ -86,13 +86,13 @@ class DataValidator:
         try:
             if type == "integer":
                 # Check if all non-null values are integers
-                if not pd.to_numeric(df[column], errors='coerce').notna().all():
-                     self.errors.append(f"Column '{column}' contains non-integer values.")
+                if not pd.to_numeric(df[column], errors="coerce").notna().all():
+                    self.errors.append(f"Column '{column}' contains non-integer values.")
             elif type == "float":
-                if not pd.to_numeric(df[column], errors='coerce').notna().all():
+                if not pd.to_numeric(df[column], errors="coerce").notna().all():
                     self.errors.append(f"Column '{column}' contains non-float values.")
             elif type == "datetime":
-                if pd.to_datetime(df[column], errors='coerce').isnull().any():
+                if pd.to_datetime(df[column], errors="coerce").isnull().any():
                     self.errors.append(f"Column '{column}' contains non-datetime values.")
             else:
                 # For other types, we can just check the dtype
@@ -104,16 +104,25 @@ class DataValidator:
             self.errors.append(f"Type check for column '{column}' failed: {e}")
 
     def _check_is_in_range(
-        self, df: pd.DataFrame, column: str, min_value: Union[int, float], max_value: Union[int, float], **kwargs: Any
+        self,
+        df: pd.DataFrame,
+        column: str,
+        min_value: Union[int, float],
+        max_value: Union[int, float],
+        **kwargs: Any,
     ) -> None:
         """Checks if values in a numeric column are within a specified range."""
-        if not pd.to_numeric(df[column], errors='coerce').between(min_value, max_value).all():
-            out_of_range = df[~pd.to_numeric(df[column], errors='coerce').between(min_value, max_value)]
+        if not pd.to_numeric(df[column], errors="coerce").between(min_value, max_value).all():
+            out_of_range = df[
+                ~pd.to_numeric(df[column], errors="coerce").between(min_value, max_value)
+            ]
             self.errors.append(
                 f"Column '{column}' has {len(out_of_range)} values outside the range [{min_value}, {max_value}]."
             )
 
-    def _check_is_in_set(self, df: pd.DataFrame, column: str, allowed_values: List[Any], **kwargs: Any) -> None:
+    def _check_is_in_set(
+        self, df: pd.DataFrame, column: str, allowed_values: List[Any], **kwargs: Any
+    ) -> None:
         """Checks if all values in a column are from a specified set."""
         if not df[column].isin(allowed_values).all():
             invalid_values = df[~df[column].isin(allowed_values)][column].unique()

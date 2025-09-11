@@ -74,7 +74,9 @@ class PostgreSQLAdapter(LoaderInterface):
 
         with self.conn.cursor() as cursor:
             logging.info(f"Ensuring schema '{schema_name}' exists...")
-            cursor.execute(sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name)))
+            cursor.execute(
+                sql.SQL("CREATE SCHEMA IF NOT EXISTS {}").format(sql.Identifier(schema_name))
+            )
 
             for table_name, table_def in tables.items():
                 logging.info(f"Ensuring table '{schema_name}.{table_name}' exists...")
@@ -114,22 +116,30 @@ class PostgreSQLAdapter(LoaderInterface):
         if mode not in ["append", "overwrite"]:
             raise ValueError("Mode must be either 'append' or 'overwrite'.")
 
-        full_table_name = sql.SQL("{}.{}").format(sql.Identifier(schema), sql.Identifier(target_table))
+        full_table_name = sql.SQL("{}.{}").format(
+            sql.Identifier(schema), sql.Identifier(target_table)
+        )
 
         with self.conn.cursor() as cursor:
             if mode == "overwrite":
                 logging.info(f"Overwriting table: {full_table_name.as_string(cursor)}")
-                cursor.execute(sql.SQL("TRUNCATE TABLE {} RESTART IDENTITY").format(full_table_name))
+                cursor.execute(
+                    sql.SQL("TRUNCATE TABLE {} RESTART IDENTITY").format(full_table_name)
+                )
 
             buffer = io.StringIO()
             # Use the CSV format, which is more robust for complex string data.
             # QUOTE_MINIMAL ensures that fields are only quoted if they contain
             # the delimiter, quotechar, or lineterminator.
-            data.to_csv(buffer, index=False, header=False, sep=',', na_rep='', quoting=1) # 1 = csv.QUOTE_MINIMAL
+            data.to_csv(
+                buffer, index=False, header=False, sep=",", na_rep="", quoting=1
+            )  # 1 = csv.QUOTE_MINIMAL
             buffer.seek(0)
 
             # Use FORMAT csv, which correctly handles quoted fields.
-            copy_sql = sql.SQL("COPY {} FROM STDIN WITH (FORMAT csv, HEADER false)").format(full_table_name)
+            copy_sql = sql.SQL("COPY {} FROM STDIN WITH (FORMAT csv, HEADER false)").format(
+                full_table_name
+            )
 
             logging.info(f"Starting bulk load to '{full_table_name.as_string(cursor)}'...")
             cursor.copy_expert(sql=copy_sql.as_string(cursor), file=buffer)
@@ -147,7 +157,9 @@ class PostgreSQLAdapter(LoaderInterface):
         if not primary_keys:
             raise ValueError("primary_keys must be provided for a merge operation.")
 
-        logging.info(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
+        logging.info(
+            f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'..."
+        )
 
         with self.conn.cursor() as cursor:
             query = sql.SQL("""
@@ -158,7 +170,9 @@ class PostgreSQLAdapter(LoaderInterface):
             table_cols = [row[0] for row in cursor.fetchall()]
 
             if not table_cols:
-                logging.warning(f"Staging table '{schema}.{staging_table}' is empty or does not exist. Skipping merge.")
+                logging.warning(
+                    f"Staging table '{schema}.{staging_table}' is empty or does not exist. Skipping merge."
+                )
                 return
 
             update_cols = [col for col in table_cols if col not in primary_keys]
@@ -166,7 +180,8 @@ class PostgreSQLAdapter(LoaderInterface):
                 raise ValueError("No columns to update (all columns are primary keys).")
 
             update_clause = sql.SQL(", ").join(
-                sql.SQL("{col} = EXCLUDED.{col}").format(col=sql.Identifier(col)) for col in update_cols
+                sql.SQL("{col} = EXCLUDED.{col}").format(col=sql.Identifier(col))
+                for col in update_cols
             )
             merge_sql = sql.SQL("""
                 INSERT INTO {target} ({cols})
@@ -187,13 +202,17 @@ class PostgreSQLAdapter(LoaderInterface):
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
 
-        query = sql.SQL("SELECT * FROM {}.ingestion_state WHERE dataset_id = %s").format(sql.Identifier(schema))
+        query = sql.SQL("SELECT * FROM {}.ingestion_state WHERE dataset_id = %s").format(
+            sql.Identifier(schema)
+        )
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute(query, (dataset_id,))
             result = cursor.fetchone()
             return dict(result) if result else {}
 
-    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
+    def update_state(
+        self, dataset_id: str, state: Dict[str, Any], status: str, schema: str
+    ) -> None:
         """
         Update the ingestion state for a dataset.
         This method should be executed within a transaction.
@@ -224,10 +243,17 @@ class PostgreSQLAdapter(LoaderInterface):
         """).format(schema=sql.Identifier(schema))
 
         with self.conn.cursor() as cursor:
-            cursor.execute(update_sql, (
-                dataset_id, now, now if status == 'SUCCESS' else None,
-                status, last_watermark, pipeline_version
-            ))
+            cursor.execute(
+                update_sql,
+                (
+                    dataset_id,
+                    now,
+                    now if status == "SUCCESS" else None,
+                    status,
+                    last_watermark,
+                    pipeline_version,
+                ),
+            )
             logging.info(f"State for dataset '{dataset_id}' updated with status '{status}'.")
 
     def get_all_states(self, schema: str) -> List[Dict[str, Any]]:
@@ -235,7 +261,9 @@ class PostgreSQLAdapter(LoaderInterface):
         if not self.conn:
             raise ConnectionError("Not connected. Call connect() first.")
 
-        query = sql.SQL("SELECT * FROM {}.ingestion_state ORDER BY dataset_id").format(sql.Identifier(schema))
+        query = sql.SQL("SELECT * FROM {}.ingestion_state ORDER BY dataset_id").format(
+            sql.Identifier(schema)
+        )
         with self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cursor:
             cursor.execute(query)
             return [dict(row) for row in cursor.fetchall()]

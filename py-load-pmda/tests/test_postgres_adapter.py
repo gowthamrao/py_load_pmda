@@ -1,9 +1,11 @@
+import json
 from typing import Any, Dict
 
 import pandas as pd
 import psycopg2
 import pytest
 from psycopg2 import sql
+
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 
@@ -13,6 +15,7 @@ def adapter(mocker: Any) -> PostgreSQLAdapter:
     adapter = PostgreSQLAdapter()
     adapter.conn = mocker.MagicMock()
     return adapter
+
 
 @pytest.fixture
 def db_details() -> Dict[str, Any]:
@@ -25,6 +28,7 @@ def db_details() -> Dict[str, Any]:
         "password": "test",
         "dbname": "testdb",
     }
+
 
 def test_connect_success(mocker: Any, db_details: Dict[str, Any]) -> None:
     """
@@ -43,6 +47,7 @@ def test_connect_success(mocker: Any, db_details: Dict[str, Any]) -> None:
     assert "type" not in call_args
     assert call_args["host"] == "localhost"
 
+
 def test_connect_failure(mocker: Any, db_details: Dict[str, Any]) -> None:
     """
     Tests that a ConnectionError is raised when psycopg2.connect fails.
@@ -54,6 +59,7 @@ def test_connect_failure(mocker: Any, db_details: Dict[str, Any]) -> None:
 
     with pytest.raises(ConnectionError, match="Failed to connect to PostgreSQL."):
         new_adapter.connect(db_details)
+
 
 def test_connect_is_idempotent(mocker: Any, db_details: Dict[str, Any]) -> None:
     """
@@ -68,7 +74,8 @@ def test_connect_is_idempotent(mocker: Any, db_details: Dict[str, Any]) -> None:
 
     # Second call should do nothing
     new_adapter.connect(db_details)
-    mock_connect.assert_called_once() # Should still be 1
+    mock_connect.assert_called_once()  # Should still be 1
+
 
 def test_ensure_schema(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """Tests that ensure_schema generates and executes correct SQL using sql module."""
@@ -78,7 +85,7 @@ def test_ensure_schema(adapter: PostgreSQLAdapter, mocker: Any) -> None:
             "test_table": {
                 "columns": {"id": "SERIAL PRIMARY KEY", "name": "TEXT"},
             }
-        }
+        },
     }
     assert adapter.conn is not None
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
@@ -92,13 +99,17 @@ def test_ensure_schema(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     assert isinstance(mock_cursor.execute.call_args_list[1][0][0], sql.Composed)
     adapter.conn.commit.assert_not_called()
 
+
 def test_bulk_load_append(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """Tests bulk_load in 'append' mode, ensuring no TRUNCATE call."""
     df = pd.DataFrame({"id": [1, 2], "name": ["A", "B"]})
     mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value
 
     # Mock the as_string method to avoid the TypeError with mock cursors
-    mocker.patch("psycopg2.sql.Composed.as_string", return_value='COPY "my_schema"."my_table" FROM STDIN WITH (FORMAT text, DELIMITER E\'\\t\', NULL \'\\N\')')
+    mocker.patch(
+        "psycopg2.sql.Composed.as_string",
+        return_value="COPY \"my_schema\".\"my_table\" FROM STDIN WITH (FORMAT text, DELIMITER E'\\t', NULL '\\N')",
+    )
 
     adapter.bulk_load(df, "my_table", "my_schema", mode="append")
 
@@ -106,9 +117,10 @@ def test_bulk_load_append(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     mock_cursor.execute.assert_not_called()
 
     mock_cursor.copy_expert.assert_called_once()
-    sql_arg = mock_cursor.copy_expert.call_args.kwargs['sql']
+    sql_arg = mock_cursor.copy_expert.call_args.kwargs["sql"]
     assert 'COPY "my_schema"."my_table" FROM STDIN' in sql_arg
     adapter.conn.commit.assert_not_called()
+
 
 def test_bulk_load_overwrite(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """Tests bulk_load in 'overwrite' mode, ensuring TRUNCATE is called."""
@@ -125,6 +137,7 @@ def test_bulk_load_overwrite(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     mock_cursor.copy_expert.assert_called_once()
     adapter.conn.commit.assert_not_called()
 
+
 def test_bulk_load_empty_df(adapter: PostgreSQLAdapter) -> None:
     """Tests that bulk_load exits gracefully for an empty DataFrame."""
     df = pd.DataFrame()
@@ -133,6 +146,7 @@ def test_bulk_load_empty_df(adapter: PostgreSQLAdapter) -> None:
     adapter.conn.cursor.assert_not_called()
     adapter.conn.commit.assert_not_called()
 
+
 def test_get_latest_state_found(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """
     Tests retrieving an existing state.
@@ -140,7 +154,7 @@ def test_get_latest_state_found(adapter: PostgreSQLAdapter, mocker: Any) -> None
     not just a part of it.
     """
     assert adapter.conn is not None
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value  # type: ignore
 
     # This is what the function *should* return
     full_expected_state = {
@@ -162,21 +176,20 @@ def test_get_latest_state_found(adapter: PostgreSQLAdapter, mocker: Any) -> None
 
 def test_get_latest_state_not_found(adapter: PostgreSQLAdapter) -> None:
     """Tests retrieving a non-existing state."""
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value  # type: ignore
     mock_cursor.fetchone.return_value = None
 
     state = adapter.get_latest_state("my_dataset", schema="public")
 
     assert state == {}
 
-import json
 
 def test_update_state_success(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """
     Tests updating a state with a SUCCESS status and verifies the watermark structure.
     """
     mocker.patch("py_load_pmda.adapters.postgres.version", return_value="0.1.0")
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value  # type: ignore
 
     # This represents the full state object passed to the method
     state_to_save = {
@@ -196,20 +209,21 @@ def test_update_state_success(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     assert saved_watermark == {"timestamp": "2025-09-09"}
 
     # Check other parameters too
-    assert args[2] is not None # last_successful_ts
+    assert args[2] is not None  # last_successful_ts
     assert args[3] == "SUCCESS"
-    adapter.conn.commit.assert_not_called() # type: ignore
+    adapter.conn.commit.assert_not_called()  # type: ignore
+
 
 def test_update_state_failure(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """Tests updating a state with a FAILED status."""
     mocker.patch("py_load_pmda.adapters.postgres.version", return_value="0.1.0")
-    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value # type: ignore
+    mock_cursor = adapter.conn.cursor.return_value.__enter__.return_value  # type: ignore
 
     adapter.update_state("my_dataset", {}, "FAILED", schema="public")
 
     mock_cursor.execute.assert_called_once()
     # Check that last_successful_ts is None
     args = mock_cursor.execute.call_args[0][1]
-    assert args[2] is None # last_successful_ts
+    assert args[2] is None  # last_successful_ts
     assert args[3] == "FAILED"
-    adapter.conn.commit.assert_not_called() # type: ignore
+    adapter.conn.commit.assert_not_called()  # type: ignore

@@ -69,7 +69,9 @@ class LoaderInterface(ABC):
         pass
 
     @abstractmethod
-    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
+    def update_state(
+        self, dataset_id: str, state: Dict[str, Any], status: str, schema: str
+    ) -> None:
         """
         Transactionally update the ingestion state after a load.
         This method should be executed within a transaction.

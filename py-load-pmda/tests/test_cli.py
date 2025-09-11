@@ -1,7 +1,8 @@
 from typing import Any
 
-from py_load_pmda.cli import app
 from typer.testing import CliRunner
+
+from py_load_pmda.cli import app
 
 runner = CliRunner()
 
@@ -10,7 +11,9 @@ def test_init_db_success(mocker: Any, caplog: Any) -> None:
     """
     Tests that the 'init-db' command succeeds and calls the correct methods.
     """
-    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
+    mocker.patch(
+        "py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}}
+    )
     mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
 
     # The mock adapter must also be a context manager
@@ -34,7 +37,9 @@ def test_init_db_connection_error(mocker: Any, caplog: Any) -> None:
     """
     Tests that 'init-db' command fails gracefully on ConnectionError.
     """
-    mocker.patch("py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}})
+    mocker.patch(
+        "py_load_pmda.cli.load_config", return_value={"database": {}, "logging": {"level": "INFO"}}
+    )
     mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
 
     # The mock adapter must also be a context manager
@@ -63,12 +68,9 @@ def test_run_command_calls_orchestrator(mocker: Any, caplog: Any) -> None:
     mock_orchestrator_instance = mock_orchestrator_class.return_value
 
     # 2. Invoke the CLI runner with specific arguments
-    result = runner.invoke(app, [
-        "run",
-        "--dataset", "approvals",
-        "--year", "2023",
-        "--mode", "full"
-    ])
+    result = runner.invoke(
+        app, ["run", "--dataset", "approvals", "--year", "2023", "--mode", "full"]
+    )
 
     # 3. Assert the outcome
     assert result.exit_code == 0
@@ -91,7 +93,9 @@ def test_run_command_handles_orchestrator_exception(mocker: Any, caplog: Any) ->
     mocker.patch("py_load_pmda.cli.load_config")
     mock_orchestrator_class = mocker.patch("py_load_pmda.cli.Orchestrator")
     mock_orchestrator_instance = mock_orchestrator_class.return_value
-    mock_orchestrator_instance.run.side_effect = ValueError("Something went wrong in the orchestrator")
+    mock_orchestrator_instance.run.side_effect = ValueError(
+        "Something went wrong in the orchestrator"
+    )
 
     result = runner.invoke(app, ["run", "--dataset", "jader"])
 
@@ -106,12 +110,10 @@ def test_run_approvals_missing_year(mocker: Any) -> None:
     without the '--drug-name' option.
     """
     # Mock config loading to prevent it from trying to read a real file
-    mocker.patch("py_load_pmda.cli.load_config", return_value={
-        "database": {"type": "postgres"},
-        "datasets": {
-            "package_inserts": {}
-        }
-    })
+    mocker.patch(
+        "py_load_pmda.cli.load_config",
+        return_value={"database": {"type": "postgres"}, "datasets": {"package_inserts": {}}},
+    )
     result = runner.invoke(app, ["run", "--dataset", "package_inserts"])
 
     assert result.exit_code == 1
@@ -122,10 +124,10 @@ def test_status_command_success(mocker: Any) -> None:
     """
     Tests that the 'status' command runs successfully and prints a table.
     """
-    mocker.patch("py_load_pmda.cli.load_config", return_value={
-        "database": {"type": "postgres"},
-        "logging": {"level": "INFO"}
-    })
+    mocker.patch(
+        "py_load_pmda.cli.load_config",
+        return_value={"database": {"type": "postgres"}, "logging": {"level": "INFO"}},
+    )
     mock_get_db_adapter = mocker.patch("py_load_pmda.cli.get_db_adapter")
     mock_adapter_context = mock_get_db_adapter.return_value
     mock_adapter_instance = mock_adapter_context.__enter__.return_value
@@ -137,15 +139,15 @@ def test_status_command_success(mocker: Any) -> None:
             "status": "SUCCESS",
             "last_run_ts_utc": "2025-09-10T12:00:00Z",
             "last_successful_run_ts_utc": "2025-09-10T12:00:00Z",
-            "pipeline_version": "0.1.0"
+            "pipeline_version": "0.1.0",
         },
         {
             "dataset_id": "jader",
             "status": "FAILED",
             "last_run_ts_utc": "2025-09-10T11:00:00Z",
             "last_successful_run_ts_utc": "2025-09-09T10:00:00Z",
-            "pipeline_version": "0.1.0"
-        }
+            "pipeline_version": "0.1.0",
+        },
     ]
     mock_adapter_instance.get_all_states.return_value = mock_states
 

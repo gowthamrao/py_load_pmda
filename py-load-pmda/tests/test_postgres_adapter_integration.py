@@ -17,11 +17,13 @@ def test_bulk_load_and_query(postgres_adapter: tuple[PostgreSQLAdapter, str]):
 
     # 1. Define sample data and table schema
     table_name = "test_users"
-    data_to_load = pd.DataFrame({
-        "id": [1, 2, 3],
-        "name": ["Alice", "Bob", "Charlie"],
-        "email": ["alice@test.com", "bob@test.com", "charlie@test.com"],
-    })
+    data_to_load = pd.DataFrame(
+        {
+            "id": [1, 2, 3],
+            "name": ["Alice", "Bob", "Charlie"],
+            "email": ["alice@test.com", "bob@test.com", "charlie@test.com"],
+        }
+    )
 
     schema_definition = {
         "schema_name": schema_name,
@@ -34,7 +36,7 @@ def test_bulk_load_and_query(postgres_adapter: tuple[PostgreSQLAdapter, str]):
                 },
                 "primary_key": "id",  # This is the correct way for the adapter
             }
-        }
+        },
     }
 
     # 2. Create the table using the adapter
@@ -48,7 +50,9 @@ def test_bulk_load_and_query(postgres_adapter: tuple[PostgreSQLAdapter, str]):
 
     # 4. Query the data back from the database using the live connection
     assert adapter.conn is not None, "Connection should still be active"
-    loaded_data = pd.read_sql(f"SELECT * FROM {schema_name}.{table_name} ORDER BY id;", adapter.conn)
+    loaded_data = pd.read_sql(
+        f"SELECT * FROM {schema_name}.{table_name} ORDER BY id;", adapter.conn
+    )
 
     # 5. Assert that the loaded data is identical to the original data
     assert_frame_equal(data_to_load, loaded_data)

@@ -1,5 +1,6 @@
 import pytest
 from requests_mock import Mocker
+
 from py_load_pmda.extractor import ReviewReportsExtractor
 
 # More realistic mock HTML for search results page for Review Reports.
@@ -42,17 +43,17 @@ def mock_pmda_review_search(requests_mock: Mocker) -> None:
     """Fixture to mock PMDA search and download for review reports."""
     search_url = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
     # Mock the initial GET to fetch the session token
-    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
+    requests_mock.get(
+        search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>'
+    )
     # Mock the POST request that returns the search results
     requests_mock.post(search_url, text=MOCK_SEARCH_RESULTS_HTML)
     # Mock the download endpoints for the valid PDFs
     requests_mock.get(
-        "https://www.pmda.go.jp/drugs/2020/P20200123/report.pdf",
-        content=b"Report A PDF content"
+        "https://www.pmda.go.jp/drugs/2020/P20200123/report.pdf", content=b"Report A PDF content"
     )
     requests_mock.get(
-        "https://www.pmda.go.jp/drugs/2022/P20220401/re-report.pdf",
-        content=b"Report B PDF content"
+        "https://www.pmda.go.jp/drugs/2022/P20220401/re-report.pdf", content=b"Report B PDF content"
     )
 
 

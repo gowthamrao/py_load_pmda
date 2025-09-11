@@ -1,9 +1,11 @@
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
 import pytest
-from unittest.mock import MagicMock, patch, ANY
-from pathlib import Path
 
 from py_load_pmda.orchestrator import Orchestrator
+
 
 @pytest.fixture
 def mock_config():
@@ -89,7 +91,7 @@ def test_orchestrator_run_successful(
     # Make sure the table name matches the one in mock_config
     mock_schemas.DATASET_SCHEMAS.get.return_value = {
         "schema_name": "public",
-        "tables": {"pmda_approvals": {"columns": {"clean": "TEXT"}}}
+        "tables": {"pmda_approvals": {"columns": {"clean": "TEXT"}}},
     }
     mock_adapter.get_latest_state.return_value = {"old": "state"}
 

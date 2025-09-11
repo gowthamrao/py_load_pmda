@@ -1,15 +1,16 @@
-import hashlib
 from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
 import pytest
+from typer.testing import CliRunner
+
 from py_load_pmda.cli import app
 from py_load_pmda.interfaces import LoaderInterface
 from py_load_pmda.transformer import ReviewReportsTransformer
 from py_load_pmda.utils import to_iso_date
-from typer.testing import CliRunner
+
 
 # A re-usable mock DB adapter to spy on calls to the database
 class MockDBAdapter(LoaderInterface):
@@ -26,25 +27,54 @@ class MockDBAdapter(LoaderInterface):
         self.execute_sql_spy = MagicMock()
         self.get_all_states_spy = MagicMock(return_value=[])
 
-    def connect(self, connection_details): self.connect_spy(connection_details)
-    def disconnect(self): self.disconnect_spy()
-    def ensure_schema(self, schema_definition): self.ensure_schema_spy(schema_definition)
-    def bulk_load(self, data, target_table, schema, mode='append'): self.bulk_load_spy(data=data, target_table=target_table, schema=schema, mode=mode)
-    def execute_merge(self, staging_table, target_table, primary_keys, schema): self.execute_merge_spy(staging_table=staging_table, target_table=target_table, primary_keys=primary_keys, schema=schema)
-    def get_latest_state(self, dataset_id, schema): return self.get_latest_state_spy(dataset_id=dataset_id, schema=schema)
-    def update_state(self, dataset_id, state, status, schema): self.update_state_spy(dataset_id=dataset_id, state=state, status=status, schema=schema)
-    def get_all_states(self, schema: str): return self.get_all_states_spy(schema=schema)
-    def commit(self): self.commit_spy()
-    def rollback(self): self.rollback_spy()
-    def execute_sql(self, query, params=None): self.execute_sql_spy(query, params)
+    def connect(self, connection_details):
+        self.connect_spy(connection_details)
+
+    def disconnect(self):
+        self.disconnect_spy()
+
+    def ensure_schema(self, schema_definition):
+        self.ensure_schema_spy(schema_definition)
+
+    def bulk_load(self, data, target_table, schema, mode="append"):
+        self.bulk_load_spy(data=data, target_table=target_table, schema=schema, mode=mode)
+
+    def execute_merge(self, staging_table, target_table, primary_keys, schema):
+        self.execute_merge_spy(
+            staging_table=staging_table,
+            target_table=target_table,
+            primary_keys=primary_keys,
+            schema=schema,
+        )
+
+    def get_latest_state(self, dataset_id, schema):
+        return self.get_latest_state_spy(dataset_id=dataset_id, schema=schema)
+
+    def update_state(self, dataset_id, state, status, schema):
+        self.update_state_spy(dataset_id=dataset_id, state=state, status=status, schema=schema)
+
+    def get_all_states(self, schema: str):
+        return self.get_all_states_spy(schema=schema)
+
+    def commit(self):
+        self.commit_spy()
+
+    def rollback(self):
+        self.rollback_spy()
+
+    def execute_sql(self, query, params=None):
+        self.execute_sql_spy(query, params)
+
 
 @pytest.fixture
 def mock_db_adapter_fixture():
     return MockDBAdapter()
 
+
 @pytest.fixture
 def fixture_path() -> Path:
     return Path(__file__).parent / "fixtures"
+
 
 @pytest.fixture
 def html_fixture(fixture_path: Path) -> str:
@@ -52,15 +82,16 @@ def html_fixture(fixture_path: Path) -> str:
     with open(fixture_path / "sample_review_report_search_fixed.html", "r", encoding="utf-8") as f:
         return f.read()
 
+
 # --- Unit Test for the Transformer (Restored) ---
 def test_review_reports_transformer_unit():
     """Unit test for the ReviewReportsTransformer to ensure it extracts data correctly."""
     mock_text = "販売名: テストドラッグ錠\n申請者名: テスト製薬株式会社\n申請年月日: 令和7年1月15日\n承認年月日: 2025年9月10日"
-    parser_output = (mock_text, [pd.DataFrame({'colA': [1]})])
+    parser_output = (mock_text, [pd.DataFrame({"colA": [1]})])
     transformer = ReviewReportsTransformer(source_url="http://example.com/report.pdf")
     df = transformer.transform(parser_output)
-    assert df.iloc[0]['brand_name_jp'] == "テストドラッグ錠"
-    assert df.iloc[0]['application_date'] == to_iso_date(pd.Series(["令和7年1月15日"]))[0]
+    assert df.iloc[0]["brand_name_jp"] == "テストドラッグ錠"
+    assert df.iloc[0]["application_date"] == to_iso_date(pd.Series(["令和7年1月15日"]))[0]
 
 
 # --- End-to-End Test for the CLI ---
@@ -69,7 +100,12 @@ def test_review_reports_transformer_unit():
 @patch("py_load_pmda.extractor.BaseExtractor._download_file")
 @patch("py_load_pmda.parser.pdfplumber.open")
 def test_review_reports_pipeline_e2e(
-    mock_pdfplumber_open, mock_download, mock_post, mock_get_db_adapter, mock_db_adapter_fixture, html_fixture
+    mock_pdfplumber_open,
+    mock_download,
+    mock_post,
+    mock_get_db_adapter,
+    mock_db_adapter_fixture,
+    html_fixture,
 ):
     """
     A true end-to-end integration test for the 'review_reports' pipeline.
@@ -104,7 +140,7 @@ def test_review_reports_pipeline_e2e(
     # The merge operation should be called since the pipeline will now produce data
     mock_db_adapter_fixture.execute_merge_spy.assert_called_once()
 
-    loaded_df = mock_db_adapter_fixture.bulk_load_spy.call_args.kwargs['data']
+    loaded_df = mock_db_adapter_fixture.bulk_load_spy.call_args.kwargs["data"]
 
     record = loaded_df.iloc[0]
     assert record["brand_name_jp"] == "Test Drug 60mg"
