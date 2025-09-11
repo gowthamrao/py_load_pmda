@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any, Dict, List
 
 import pandas as pd
-from google.api_core.exceptions import Conflict, NotFound
+from google.api_core.exceptions import NotFound
 from google.cloud import bigquery, storage
 
 from py_load_pmda.interfaces import LoaderInterface
@@ -96,7 +96,7 @@ class BigQueryAdapter(LoaderInterface):
             col_type_str = str(col_type).upper()
 
             # Handle complex types like VARCHAR(100)
-            if 'VARCHAR' in col_type_str:
+            if "VARCHAR" in col_type_str:
                 bq_type = BIGQUERY_TYPE_MAP.get("VARCHAR", "STRING")
             else:
                 bq_type = BIGQUERY_TYPE_MAP.get(col_type_str, None)
@@ -202,7 +202,9 @@ class BigQueryAdapter(LoaderInterface):
 
         on_clause = " AND ".join([f"T.{pk} = S.{pk}" for pk in primary_keys])
         update_clause = ", ".join([f"T.{col} = S.{col}" for col in columns])
-        insert_clause = f"({', '.join(columns)}) VALUES ({', '.join([f'S.{col}' for col in columns])})"
+        insert_clause = (
+            f"({', '.join(columns)}) VALUES ({', '.join([f'S.{col}' for col in columns])})"
+        )
 
         query = f"""
             MERGE {target_id} T
@@ -233,13 +235,15 @@ class BigQueryAdapter(LoaderInterface):
                 return {}
 
             row_dict = dict(rows[0].items())
-            if 'last_watermark' in row_dict and row_dict['last_watermark']:
-                row_dict['last_watermark'] = json.loads(row_dict['last_watermark'])
+            if "last_watermark" in row_dict and row_dict["last_watermark"]:
+                row_dict["last_watermark"] = json.loads(row_dict["last_watermark"])
             return row_dict
         except NotFound:
             return {}
 
-    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
+    def update_state(
+        self, dataset_id: str, state: Dict[str, Any], status: str, schema: str
+    ) -> None:
         """Transactionally update the ingestion state after a load in BigQuery."""
         if not self.client:
             raise ConnectionError("Not connected. Call connect() first.")
@@ -268,12 +272,13 @@ class BigQueryAdapter(LoaderInterface):
                 bigquery.ScalarQueryParameter("dataset_id", "STRING", dataset_id),
                 bigquery.ScalarQueryParameter("last_run", "TIMESTAMP", pd.Timestamp.utcnow()),
                 bigquery.ScalarQueryParameter("status", "STRING", status),
-                bigquery.ScalarQueryParameter("watermark", "JSON", json.dumps(state.get("last_watermark", {}))),
+                bigquery.ScalarQueryParameter(
+                    "watermark", "JSON", json.dumps(state.get("last_watermark", {}))
+                ),
                 bigquery.ScalarQueryParameter("version", "STRING", state.get("pipeline_version")),
             ]
         )
         self.client.query(query, job_config=job_config).result()
-
 
     def get_all_states(self, schema: str) -> List[Dict[str, Any]]:
         """Retrieve all ingestion states from the database."""
@@ -288,8 +293,8 @@ class BigQueryAdapter(LoaderInterface):
             results = []
             for row in rows:
                 row_dict = dict(row.items())
-                if 'last_watermark' in row_dict and row_dict['last_watermark']:
-                    row_dict['last_watermark'] = json.loads(row_dict['last_watermark'])
+                if "last_watermark" in row_dict and row_dict["last_watermark"]:
+                    row_dict["last_watermark"] = json.loads(row_dict["last_watermark"])
                 results.append(row_dict)
             return results
         except NotFound:

@@ -2,9 +2,11 @@ from typing import Any
 
 import pytest
 from psycopg2 import sql
+
 from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 # --- Test Fixtures ---
+
 
 @pytest.fixture
 def adapter(mocker: Any) -> PostgreSQLAdapter:
@@ -14,7 +16,9 @@ def adapter(mocker: Any) -> PostgreSQLAdapter:
     adapter.conn = mocker.MagicMock()
     return adapter
 
+
 # --- Test Cases ---
+
 
 def test_execute_merge_constructs_correct_sql(adapter: PostgreSQLAdapter, mocker: Any) -> None:
     """
@@ -41,6 +45,7 @@ def test_execute_merge_constructs_correct_sql(adapter: PostgreSQLAdapter, mocker
 
     adapter.conn.commit.assert_not_called()
 
+
 def test_execute_merge_no_primary_keys_raises_error(adapter: PostgreSQLAdapter) -> None:
     """
     Tests that execute_merge raises a ValueError if no primary keys are provided.
@@ -48,7 +53,10 @@ def test_execute_merge_no_primary_keys_raises_error(adapter: PostgreSQLAdapter) 
     with pytest.raises(ValueError, match="primary_keys must be provided"):
         adapter.execute_merge("staging", "target", [], "schema")
 
-def test_execute_merge_no_update_columns_raises_error(adapter: PostgreSQLAdapter, mocker: Any) -> None:
+
+def test_execute_merge_no_update_columns_raises_error(
+    adapter: PostgreSQLAdapter, mocker: Any
+) -> None:
     """
     Tests that a ValueError is raised if all columns are primary keys,
     as this is likely a configuration error.

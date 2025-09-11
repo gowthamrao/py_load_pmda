@@ -1,8 +1,6 @@
 import logging
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from py_load_pmda.alerting import AlertManager, LogAlerter
 
 
@@ -37,7 +35,9 @@ def test_alert_manager_with_log_alerter():
 
         # Assert
         mock_log_alerter_class.assert_called_once()
-        mock_alerter_instance.send.assert_called_once_with("Test message", subject="Important Alert")
+        mock_alerter_instance.send.assert_called_once_with(
+            "Test message", subject="Important Alert"
+        )
 
 
 def test_alert_manager_unknown_alerter(caplog):
@@ -63,7 +63,7 @@ def test_alert_manager_alerter_fails():
 
         # Act
         # We expect it to log the error but not crash
-        with patch.object(logging, 'error') as mock_log_error:
+        with patch.object(logging, "error") as mock_log_error:
             manager.send("Test message")
 
             # Assert

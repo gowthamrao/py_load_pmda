@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from py_load_pmda.config import load_config
 
 
@@ -21,6 +22,7 @@ def temp_config_file(tmp_path: Path) -> Path:
         yaml.dump(config_data, f)
     return config_path
 
+
 def test_load_config_from_file(temp_config_file: Path) -> None:
     """
     Tests that the configuration is loaded correctly from a YAML file.
@@ -29,6 +31,7 @@ def test_load_config_from_file(temp_config_file: Path) -> None:
     assert config["database"]["host"] == "localhost"
     assert config["database"]["port"] == 5432
     assert config["database"]["user"] == "testuser"
+
 
 def test_load_config_env_override(temp_config_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
@@ -46,6 +49,7 @@ def test_load_config_env_override(temp_config_file: Path, monkeypatch: pytest.Mo
     assert config["database"]["port"] == 1234
     assert config["database"]["user"] == "produser"
 
+
 def test_load_config_file_not_found() -> None:
     """
     Tests that a FileNotFoundError is raised if the config file does not exist.
@@ -53,7 +57,10 @@ def test_load_config_file_not_found() -> None:
     with pytest.raises(FileNotFoundError):
         load_config(path="/non/existent/path/config.yaml")
 
-def test_load_password_from_env_only(temp_config_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+
+def test_load_password_from_env_only(
+    temp_config_file: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """
     Tests that the password can be loaded from an environment variable even
     if it is not present in the config file at all. This validates the

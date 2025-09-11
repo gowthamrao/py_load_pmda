@@ -15,6 +15,7 @@ class BasePDFParser:
     A base class for parsing PDF files using pdfplumber.
     Provides a generic method to extract all text and tables.
     """
+
     def __init__(self) -> None:
         pass
 
@@ -67,6 +68,7 @@ class PackageInsertsParser(BasePDFParser):
     Parses downloaded Package Insert PDF files.
     Inherits the generic PDF parsing logic from BasePDFParser.
     """
+
     pass
 
 
@@ -74,6 +76,7 @@ class XMLParser:
     """
     Parses an XML file into a pandas DataFrame using an XPath expression.
     """
+
     def __init__(self) -> None:
         pass
 
@@ -111,6 +114,7 @@ class ApprovalsParser:
     """
     Parses the downloaded New Drug Approvals Excel file.
     """
+
     def __init__(self) -> None:
         pass
 
@@ -118,11 +122,12 @@ class ApprovalsParser:
         """Finds the header row index by searching for a keyword."""
         for i, row in df.head(search_limit).iterrows():
             # Normalize the row content by removing whitespace before searching
-            normalized_row = row.astype(str).str.replace(r'\s+', '', regex=True)
+            normalized_row = row.astype(str).str.replace(r"\s+", "", regex=True)
             if normalized_row.str.contains(keyword, na=False).any():
                 return int(i)  # type: ignore
-        raise ValueError(f"Could not find header row containing '{keyword}' within the first {search_limit} rows.")
-
+        raise ValueError(
+            f"Could not find header row containing '{keyword}' within the first {search_limit} rows."
+        )
 
     def parse(self, file_path: Path) -> List[pd.DataFrame]:
         """
@@ -150,7 +155,7 @@ class ApprovalsParser:
             df = pd.read_excel(file_path, header=header_row_index)
 
             # Clean up column names (remove newlines and spaces)
-            df.columns = df.columns.str.strip().str.replace(r'\s+', '', regex=True)
+            df.columns = df.columns.str.strip().str.replace(r"\s+", "", regex=True)
 
             # Drop rows that are entirely empty
             df.dropna(how="all", inplace=True)
@@ -176,8 +181,10 @@ class JaderParser:
     - REAC.csv: Reaction (adverse event) information
     - HIST.csv: Patient history information
     """
+
     def __init__(self) -> None:
         pass
+
     # The four key files expected inside the JADER zip archive.
     JADER_FILENAMES = ["DEMO", "DRUG", "REAC", "HIST"]
 
@@ -206,14 +213,16 @@ class JaderParser:
 
             # Use the utility to detect the encoding, with a fallback to Shift-JIS
             # for JADER files, as it's the most likely encoding.
-            encoding = utils.detect_encoding(file_bytes, fallback='shift_jis')
+            encoding = utils.detect_encoding(file_bytes, fallback="shift_jis")
 
             # Use the detected encoding to read the CSV into a DataFrame
             # We use io.BytesIO to treat the byte string as a file
             return pd.read_csv(io.BytesIO(file_bytes), encoding=encoding)
 
         except Exception as e:
-            logging.error(f"Error reading or parsing '{target_filename}' from zip: {e}", exc_info=True)
+            logging.error(
+                f"Error reading or parsing '{target_filename}' from zip: {e}", exc_info=True
+            )
             return pd.DataFrame()
 
     def parse(self, file_path: Path) -> Dict[str, pd.DataFrame]:
@@ -240,7 +249,9 @@ class JaderParser:
                 table_name = f"jader_{file_stem.lower()}"
                 parsed_data[table_name] = df
                 if not df.empty:
-                    logging.info(f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows.")
+                    logging.info(
+                        f"Successfully parsed '{file_stem}.csv' into '{table_name}' with {len(df)} rows."
+                    )
 
         return parsed_data
 
@@ -250,4 +261,5 @@ class ReviewReportsParser(BasePDFParser):
     Parses downloaded Review Report PDF files.
     Inherits the generic PDF parsing logic from BasePDFParser.
     """
+
     pass

@@ -102,6 +102,7 @@ def test_check_is_in_set_success(sample_df):
     validator = DataValidator(rules)
     assert validator.validate(sample_df) is True
 
+
 def test_unknown_check(sample_df):
     """Test that an unknown check type is handled gracefully."""
     rules = [{"column": "id", "check": "is_magic"}]

@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 import chardet
-from jpdatetime import jpdatetime
 import pandas as pd
+from jpdatetime import jpdatetime
 
 
 def to_iso_date(series: pd.Series) -> pd.Series:
@@ -43,17 +43,19 @@ def to_iso_date(series: pd.Series) -> pd.Series:
     return series.apply(convert_single_date)
 
 
-def detect_encoding(data: bytes, fallback: str = 'utf-8') -> str:
+def detect_encoding(data: bytes, fallback: str = "utf-8") -> str:
     """Detects the character encoding of a byte string."""
     if not isinstance(data, bytes) or not data:
         return fallback
 
     result = chardet.detect(data)
-    encoding = result.get('encoding')
-    confidence = result.get('confidence', 0)
+    encoding = result.get("encoding")
+    confidence = result.get("confidence", 0)
 
     if confidence < 0.7 or not encoding:
-        logging.warning(f"Encoding detection uncertain (confidence: {confidence:.2f}). Falling back to '{fallback}'.")
+        logging.warning(
+            f"Encoding detection uncertain (confidence: {confidence:.2f}). Falling back to '{fallback}'."
+        )
         return fallback
 
     logging.debug(f"Detected encoding: '{encoding}' with {confidence:.2f} confidence.")

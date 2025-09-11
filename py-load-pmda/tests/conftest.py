@@ -1,7 +1,11 @@
 import importlib.util
+import uuid
+from typing import Generator, Tuple
 
 import pytest
 from testcontainers.postgres import PostgresContainer
+
+from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 
 def pytest_ignore_collect(path, config):
@@ -17,15 +21,11 @@ def pytest_ignore_collect(path, config):
             return True
     if "test_redshift_adapter.py" in path_str:
         # Redshift needs both the connector and boto3 for S3 operations.
-        if not importlib.util.find_spec("redshift_connector") or not importlib.util.find_spec("boto3"):
+        if not importlib.util.find_spec("redshift_connector") or not importlib.util.find_spec(
+            "boto3"
+        ):
             return True
     return False
-
-
-import uuid
-from typing import Generator, Tuple
-
-from py_load_pmda.adapters.postgres import PostgreSQLAdapter
 
 
 @pytest.fixture(scope="session")

@@ -1,10 +1,18 @@
 import unittest
+from pathlib import Path
 
-from py_load_pmda.parser import BasePDFParser, PackageInsertsParser, ReviewReportsParser
+import pandas as pd
+import pytest
+
+from py_load_pmda.parser import (
+    BasePDFParser,
+    PackageInsertsParser,
+    ReviewReportsParser,
+    XMLParser,
+)
 
 
 class TestParserRefactoring(unittest.TestCase):
-
     def test_inheritance(self):
         """
         Tests that the PDF parser classes inherit from the base class.
@@ -18,17 +26,10 @@ class TestParserRefactoring(unittest.TestCase):
         """
         package_parser = PackageInsertsParser()
         review_parser = ReviewReportsParser()
-        self.assertTrue(hasattr(package_parser, 'parse'))
-        self.assertTrue(hasattr(review_parser, 'parse'))
+        self.assertTrue(hasattr(package_parser, "parse"))
+        self.assertTrue(hasattr(review_parser, "parse"))
         self.assertTrue(callable(package_parser.parse))
         self.assertTrue(callable(review_parser.parse))
-
-
-from pathlib import Path
-import pandas as pd
-import pytest
-
-from py_load_pmda.parser import XMLParser
 
 
 def test_xml_parser_success():
@@ -62,6 +63,7 @@ def test_xml_parser_success():
     assert result_df.iloc[1]["name"] == "DeviceB"
     assert result_df.iloc[1]["status"] == "Pending"
 
+
 def test_xml_parser_file_not_found():
     """
     Tests that the XMLParser raises a FileNotFoundError for a non-existent file.
@@ -89,6 +91,7 @@ def test_xml_parser_invalid_xpath():
     # Check for the exception type only, not the message, to make the test less brittle.
     with pytest.raises(ValueError):
         parser.parse(fixture_path, xpath=invalid_xpath)
+
 
 def test_xml_parser_no_xpath_provided():
     """

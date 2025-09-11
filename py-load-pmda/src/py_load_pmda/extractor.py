@@ -13,6 +13,7 @@ class BaseExtractor:
     """
     A base class for extractors with robust request handling using a session.
     """
+
     def __init__(
         self,
         cache_dir: str = "./cache",
@@ -28,13 +29,13 @@ class BaseExtractor:
         self.base_url: str = "https://www.pmda.go.jp"
         self.new_state: Dict[str, Any] = {}
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            }
+        )
 
-    def _request_with_retries(
-        self, method: str, url: str, **kwargs: Any
-    ) -> requests.Response:
+    def _request_with_retries(self, method: str, url: str, **kwargs: Any) -> requests.Response:
         """
         Internal request handler with rate limiting, retries, and exponential backoff.
         """
@@ -70,9 +71,7 @@ class BaseExtractor:
         self, url: str, stream: bool = False, headers: Optional[Dict[str, str]] = None
     ) -> requests.Response:
         """Sends an HTTP GET request using the robust request handler."""
-        return self._request_with_retries(
-            "get", url, stream=stream, headers=headers
-        )
+        return self._request_with_retries("get", url, stream=stream, headers=headers)
 
     def _send_post_request(
         self,
@@ -82,9 +81,7 @@ class BaseExtractor:
         stream: bool = False,
     ) -> requests.Response:
         """Sends an HTTP POST request using the robust request handler."""
-        return self._request_with_retries(
-            "post", url, data=data, headers=headers, stream=stream
-        )
+        return self._request_with_retries("post", url, data=data, headers=headers, stream=stream)
 
     def _get_page_content(self, url: str) -> BeautifulSoup:
         """Fetches and parses the content of a given URL."""
@@ -148,9 +145,12 @@ class ApprovalsExtractor(BaseExtractor):
     """
     Extracts the New Drug Approvals list from the PMDA website.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.approvals_list_url: str = urljoin(self.base_url, "/review-services/drug-reviews/review-information/p-drugs/0010.html")
+        self.approvals_list_url: str = urljoin(
+            self.base_url, "/review-services/drug-reviews/review-information/p-drugs/0010.html"
+        )
 
     def _find_yearly_approval_url(self, soup: BeautifulSoup, year: int) -> str:
         """Finds the URL for a specific year's approval list."""
@@ -193,10 +193,13 @@ class JaderExtractor(BaseExtractor):
     """
     Extracts the JADER (Japanese Adverse Drug Event Report) dataset from the PMDA website.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # This is the landing page where the link to the JADER zip file is found.
-        self.jader_info_url: str = "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0005.html"
+        self.jader_info_url: str = (
+            "https://www.pmda.go.jp/safety/info-services/drugs/adr-info/suspected-adr/0005.html"
+        )
 
     def _find_jader_zip_url(self, soup: BeautifulSoup) -> str:
         """
@@ -204,7 +207,9 @@ class JaderExtractor(BaseExtractor):
         The link is identified by containing 'jader' and ending in '.zip'.
         """
         # A more robust selector might be needed if the site structure changes.
-        link = soup.find("a", href=lambda href: href and "jader" in href.lower() and href.endswith(".zip"))
+        link = soup.find(
+            "a", href=lambda href: href and "jader" in href.lower() and href.endswith(".zip")
+        )
         if not isinstance(link, Tag) or not link.has_attr("href"):
             raise ValueError("Could not find the JADER zip file download link on the page.")
 
@@ -237,12 +242,15 @@ class PackageInsertsExtractor(BaseExtractor):
     """
     Extracts Package Inserts from the PMDA search portal.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # The POST request goes to a URL without a trailing slash.
         self.search_url: str = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
 
-    def extract(self, drug_names: List[str], last_state: Dict[str, Any]) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
+    def extract(
+        self, drug_names: List[str], last_state: Dict[str, Any]
+    ) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
         """
         Main extraction method for package inserts.
         It searches for each drug name and downloads the corresponding package insert PDF.
@@ -262,17 +270,17 @@ class PackageInsertsExtractor(BaseExtractor):
             # This payload is based on reverse-engineering the search form.
             form_data = {
                 "nameWord": name,
-                "dispColumnsList[0]": "1", # '1' is the value for '添付文書' (Package Insert)
+                "dispColumnsList[0]": "1",  # '1' is the value for '添付文書' (Package Insert)
                 "_dispColumnsList[0]": "on",
-                "nccharset": "EBBEE281", # This seems to be a required token
+                "nccharset": "EBBEE281",  # This seems to be a required token
                 "tglOpFlg": "",
                 "isNewReleaseDisp": "true",
-                "listCategory": ""
+                "listCategory": "",
             }
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Referer": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/"
+                "Referer": "https://www.pmda.go.jp/PmdaSearch/iyakuSearch/",
             }
 
             try:
@@ -290,7 +298,9 @@ class PackageInsertsExtractor(BaseExtractor):
 
                 # Step 2: POST to the search form with the valid token
                 logging.info(f"Submitting search form for '{name}'...")
-                post_response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                post_response = self._send_post_request(
+                    self.search_url, data=form_data, headers=headers
+                )
                 post_response.encoding = post_response.apparent_encoding
                 soup = BeautifulSoup(post_response.text, "html.parser")
 
@@ -331,11 +341,15 @@ class PackageInsertsExtractor(BaseExtractor):
                             break  # Stop after finding the first exact match
 
                 if not download_url:
-                    logging.warning(f"Could not find a matching PDF download link for '{name}'. Skipping.")
+                    logging.warning(
+                        f"Could not find a matching PDF download link for '{name}'. Skipping."
+                    )
                     continue
 
                 # Step 3: Download the file
-                file_path = self._download_file(download_url, last_state=last_state.get(download_url, {}))
+                file_path = self._download_file(
+                    download_url, last_state=last_state.get(download_url, {})
+                )
                 if file_path and file_path.exists():
                     downloaded_data.append((file_path, download_url))
                     all_new_states[download_url] = self.new_state
@@ -352,12 +366,15 @@ class ReviewReportsExtractor(BaseExtractor):
     """
     Extracts Review Reports from the PMDA search portal.
     """
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         # The POST request goes to a URL without a trailing slash.
         self.search_url: str = "https://www.pmda.go.jp/PmdaSearch/iyakuSearch"
 
-    def extract(self, drug_names: List[str], last_state: Dict[str, Any]) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
+    def extract(
+        self, drug_names: List[str], last_state: Dict[str, Any]
+    ) -> Tuple[List[Tuple[Path, str]], Dict[str, Any]]:
         """
         Main extraction method for review reports.
         It searches for each drug name, parses the results, finds links
@@ -378,12 +395,12 @@ class ReviewReportsExtractor(BaseExtractor):
                 "nccharset": "",  # Will be updated with a real token
                 "tglOpFlg": "",
                 "isNewReleaseDisp": "true",
-                "listCategory": ""
+                "listCategory": "",
             }
 
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                "Referer": f"{self.search_url}/"
+                "Referer": f"{self.search_url}/",
             }
 
             try:
@@ -398,7 +415,9 @@ class ReviewReportsExtractor(BaseExtractor):
                 logging.info(f"Acquired nccharset token: {form_data['nccharset']}")
 
                 logging.info(f"Submitting search form for '{name}'...")
-                post_response = self._send_post_request(self.search_url, data=form_data, headers=headers)
+                post_response = self._send_post_request(
+                    self.search_url, data=form_data, headers=headers
+                )
                 post_response.encoding = post_response.apparent_encoding
                 soup = BeautifulSoup(post_response.text, "html.parser")
 
@@ -426,7 +445,9 @@ class ReviewReportsExtractor(BaseExtractor):
                     # Looser matching for the brand name
                     brand_name = cells[0].get_text(strip=True)
                     if name in brand_name:
-                        logging.info(f"Found potential match for '{name}' in row with brand name '{brand_name}'.")
+                        logging.info(
+                            f"Found potential match for '{name}' in row with brand name '{brand_name}'."
+                        )
 
                         # Find all links in the 5th cell
                         link_cell = cells[4]
@@ -440,7 +461,9 @@ class ReviewReportsExtractor(BaseExtractor):
                                 found_links.append(download_url)
 
                 if not found_links:
-                    logging.warning(f"Could not find any review report links for '{name}'. Skipping.")
+                    logging.warning(
+                        f"Could not find any review report links for '{name}'. Skipping."
+                    )
                     continue
 
                 # Download all found links
@@ -458,7 +481,9 @@ class ReviewReportsExtractor(BaseExtractor):
                 logging.error(f"Failed to process '{name}': {e}", exc_info=True)
                 continue
             except ValueError as e:
-                logging.error(f"A configuration or parsing error occurred for '{name}': {e}", exc_info=True)
+                logging.error(
+                    f"A configuration or parsing error occurred for '{name}': {e}", exc_info=True
+                )
                 continue
 
         logging.info(f"Downloaded {len(downloaded_data)} review report(s).")

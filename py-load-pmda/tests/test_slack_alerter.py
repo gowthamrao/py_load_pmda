@@ -1,8 +1,9 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+from slack_sdk.errors import SlackApiError
 
 from py_load_pmda.alerters.slack import SlackAlerter
-from slack_sdk.errors import SlackApiError
 
 
 class TestSlackAlerter(unittest.TestCase):
@@ -29,9 +30,7 @@ class TestSlackAlerter(unittest.TestCase):
         alerter.send("Test message", subject="Test Subject")
 
         mock_client_instance.chat_postMessage.assert_called_with(
-            channel="test-channel",
-            text="*Test Subject*\n\nTest message",
-            mrkdwn=True
+            channel="test-channel", text="*Test Subject*\n\nTest message", mrkdwn=True
         )
 
     @patch("slack_sdk.WebClient")
@@ -45,7 +44,7 @@ class TestSlackAlerter(unittest.TestCase):
         alerter = SlackAlerter(config)
         alerter.client = mock_client_instance
 
-        with self.assertLogs('py_load_pmda.alerters.slack', level='ERROR') as cm:
+        with self.assertLogs("py_load_pmda.alerters.slack", level="ERROR") as cm:
             alerter.send("Test message")
             self.assertIn("Failed to send Slack alert: test_error", cm.output[0])
 
@@ -58,9 +57,13 @@ class TestSlackAlerter(unittest.TestCase):
         alerter = SlackAlerter(config)
         alerter.client = mock_client_instance
 
-        with self.assertLogs('py_load_pmda.alerters.slack', level='ERROR') as cm:
+        with self.assertLogs("py_load_pmda.alerters.slack", level="ERROR") as cm:
             alerter.send("Test message")
-            self.assertIn("An unexpected error occurred while sending Slack alert: Unexpected error", cm.output[0])
+            self.assertIn(
+                "An unexpected error occurred while sending Slack alert: Unexpected error",
+                cm.output[0],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

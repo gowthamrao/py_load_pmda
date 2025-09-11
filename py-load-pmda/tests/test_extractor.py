@@ -1,9 +1,9 @@
-import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import call
 
 import pytest
+
 from py_load_pmda.extractor import BaseExtractor
 
 
@@ -13,14 +13,12 @@ def extractor(tmp_path: Path) -> BaseExtractor:
     cache_dir = tmp_path / "cache"
     return BaseExtractor(cache_dir=str(cache_dir))
 
+
 def test_download_file_initial(extractor: BaseExtractor, requests_mock: Any) -> None:
     """Test downloading a file for the first time."""
     url = "http://test.com/file.txt"
     mock_content = b"Hello, world!"
-    mock_headers = {
-        "ETag": '"12345"',
-        "Last-Modified": "Tue, 15 Nov 1994 12:45:26 GMT"
-    }
+    mock_headers = {"ETag": '"12345"', "Last-Modified": "Tue, 15 Nov 1994 12:45:26 GMT"}
     requests_mock.get(url, content=mock_content, headers=mock_headers)
 
     file_path = extractor._download_file(url)
@@ -29,6 +27,7 @@ def test_download_file_initial(extractor: BaseExtractor, requests_mock: Any) -> 
     assert file_path.read_bytes() == mock_content
     assert extractor.new_state["etag"] == '"12345"'
     assert extractor.new_state["last_modified"] == "Tue, 15 Nov 1994 12:45:26 GMT"
+
 
 def test_download_file_etag_match(extractor: BaseExtractor, requests_mock: Any) -> None:
     """Test that the file is not re-downloaded when ETag matches."""
@@ -44,9 +43,10 @@ def test_download_file_etag_match(extractor: BaseExtractor, requests_mock: Any) 
     file_path = extractor._download_file(url, last_state=last_state)
 
     assert file_path.exists()
-    assert file_path.read_text() == "cached content" # Should not have changed
+    assert file_path.read_text() == "cached content"  # Should not have changed
     assert requests_mock.last_request.headers["If-None-Match"] == '"12345"'
-    assert extractor.new_state == last_state # State should be preserved
+    assert extractor.new_state == last_state  # State should be preserved
+
 
 def test_download_file_last_modified_match(extractor: BaseExtractor, requests_mock: Any) -> None:
     """Test that the file is not re-downloaded when Last-Modified matches."""
@@ -62,8 +62,11 @@ def test_download_file_last_modified_match(extractor: BaseExtractor, requests_mo
 
     assert file_path.exists()
     assert file_path.read_text() == "cached content"
-    assert requests_mock.last_request.headers["If-Modified-Since"] == "Tue, 15 Nov 1994 12:45:26 GMT"
+    assert (
+        requests_mock.last_request.headers["If-Modified-Since"] == "Tue, 15 Nov 1994 12:45:26 GMT"
+    )
     assert extractor.new_state == last_state
+
 
 def test_download_file_mismatch(extractor: BaseExtractor, requests_mock: Any) -> None:
     """Test that the file is re-downloaded when headers do not match."""
@@ -74,10 +77,7 @@ def test_download_file_mismatch(extractor: BaseExtractor, requests_mock: Any) ->
     local_filepath.write_text("old content")
 
     new_content = b"new content"
-    new_headers = {
-        "ETag": '"new-etag"',
-        "Last-Modified": "Tue, 15 Nov 1994 12:45:26 GMT"
-    }
+    new_headers = {"ETag": '"new-etag"', "Last-Modified": "Tue, 15 Nov 1994 12:45:26 GMT"}
     requests_mock.get(url, content=new_content, headers=new_headers)
 
     file_path = extractor._download_file(url, last_state=last_state)
@@ -87,7 +87,10 @@ def test_download_file_mismatch(extractor: BaseExtractor, requests_mock: Any) ->
     assert extractor.new_state["etag"] == '"new-etag"'
     assert extractor.new_state["last_modified"] == "Tue, 15 Nov 1994 12:45:26 GMT"
     assert requests_mock.last_request.headers["If-None-Match"] == '"old-etag"'
-    assert requests_mock.last_request.headers["If-Modified-Since"] == "Mon, 14 Nov 1994 12:45:26 GMT"
+    assert (
+        requests_mock.last_request.headers["If-Modified-Since"] == "Mon, 14 Nov 1994 12:45:26 GMT"
+    )
+
 
 def test_download_file_only_etag_provided(extractor: BaseExtractor, requests_mock: Any) -> None:
     """Test behavior when only ETag is provided by the server."""
@@ -101,7 +104,10 @@ def test_download_file_only_etag_provided(extractor: BaseExtractor, requests_moc
     assert file_path.exists()
     assert extractor.new_state == {"etag": '"etag-only"'}
 
-def test_download_file_only_last_modified_provided(extractor: BaseExtractor, requests_mock: Any) -> None:
+
+def test_download_file_only_last_modified_provided(
+    extractor: BaseExtractor, requests_mock: Any
+) -> None:
     """Test behavior when only Last-Modified is provided by the server."""
     url = "http://test.com/file.txt"
     mock_content = b"content"
@@ -128,7 +134,10 @@ def test_extractor_initialization_with_custom_settings(tmp_path: Path) -> None:
     assert extractor.backoff_factor == 1.0
     assert extractor.rate_limit_seconds == 2.0
 
-def test_request_with_retries_and_rate_limiting(extractor: BaseExtractor, requests_mock: Any, mocker: Any) -> None:
+
+def test_request_with_retries_and_rate_limiting(
+    extractor: BaseExtractor, requests_mock: Any, mocker: Any
+) -> None:
     """
     Test the _request_with_retries method for correct rate limiting and retry logic.
     """
@@ -136,11 +145,14 @@ def test_request_with_retries_and_rate_limiting(extractor: BaseExtractor, reques
     mock_sleep = mocker.patch("time.sleep")
 
     # Simulate a server that fails twice then succeeds
-    requests_mock.get(url, [
-        {"status_code": 500, "text": "Internal Server Error"},
-        {"status_code": 503, "text": "Service Unavailable"},
-        {"status_code": 200, "text": "Success!"},
-    ])
+    requests_mock.get(
+        url,
+        [
+            {"status_code": 500, "text": "Internal Server Error"},
+            {"status_code": 503, "text": "Service Unavailable"},
+            {"status_code": 200, "text": "Success!"},
+        ],
+    )
 
     # Custom settings for this test
     extractor.retries = 3

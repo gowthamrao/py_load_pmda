@@ -2,6 +2,8 @@ import logging
 from typing import List, Optional
 
 import typer
+from rich.console import Console
+from rich.table import Table
 
 from py_load_pmda import schemas
 from py_load_pmda.config import load_config
@@ -44,9 +46,17 @@ def init_db() -> None:
 @app.command()
 def run(
     dataset: str = typer.Option(..., "--dataset", help="The ID of the dataset to run."),
-    mode: Optional[str] = typer.Option(None, "--mode", help="Load mode: 'full' or 'delta'. Overrides config."),
-    year: Optional[int] = typer.Option(None, "--year", help="The fiscal year to process for approvals (if applicable)."),
-    drug_name: Optional[List[str]] = typer.Option(None, "--drug-name", help="Name of a drug to search for package inserts. Can be specified multiple times.")
+    mode: Optional[str] = typer.Option(
+        None, "--mode", help="Load mode: 'full' or 'delta'. Overrides config."
+    ),
+    year: Optional[int] = typer.Option(
+        None, "--year", help="The fiscal year to process for approvals (if applicable)."
+    ),
+    drug_name: Optional[List[str]] = typer.Option(
+        None,
+        "--drug-name",
+        help="Name of a drug to search for package inserts. Can be specified multiple times.",
+    ),
 ) -> None:
     """
     Run an ETL process for a specific dataset defined in the config.
@@ -79,9 +89,6 @@ def run(
         raise typer.Exit(code=1)
 
 
-from rich.console import Console
-from rich.table import Table
-
 @app.command()
 def status() -> None:
     """
@@ -113,32 +120,36 @@ def status() -> None:
         table.add_column("Last Successful Run (UTC)")
         table.add_column("Pipeline Version")
 
-        for state in sorted(states, key=lambda x: x.get('dataset_id', '')):
-            status = state.get('status', 'UNKNOWN')
-            status_style = "green" if status == "SUCCESS" else "red" if status == "FAILED" else "yellow"
+        for state in sorted(states, key=lambda x: x.get("dataset_id", "")):
+            status = state.get("status", "UNKNOWN")
+            status_style = (
+                "green" if status == "SUCCESS" else "red" if status == "FAILED" else "yellow"
+            )
 
             def format_date(dt):
                 from datetime import datetime
-                if not dt: return ""
+
+                if not dt:
+                    return ""
                 if isinstance(dt, str):
                     # Handle ISO format with 'Z' for UTC
-                    if dt.endswith('Z'):
-                        dt = dt[:-1] + '+00:00'
+                    if dt.endswith("Z"):
+                        dt = dt[:-1] + "+00:00"
                     try:
                         dt_obj = datetime.fromisoformat(dt)
-                        return dt_obj.strftime('%Y-%m-%d %H:%M:%S')
+                        return dt_obj.strftime("%Y-%m-%d %H:%M:%S")
                     except ValueError:
-                        return dt # Return original string if parsing fails
+                        return dt  # Return original string if parsing fails
                 elif isinstance(dt, datetime):
-                    return dt.strftime('%Y-%m-%d %H:%M:%S')
+                    return dt.strftime("%Y-%m-%d %H:%M:%S")
                 return str(dt)
 
             table.add_row(
-                state.get('dataset_id', 'N/A'),
+                state.get("dataset_id", "N/A"),
                 f"[{status_style}]{status}[/{status_style}]",
-                format_date(state.get('last_run_ts_utc')),
-                format_date(state.get('last_successful_run_ts_utc')),
-                state.get('pipeline_version', 'N/A')
+                format_date(state.get("last_run_ts_utc")),
+                format_date(state.get("last_successful_run_ts_utc")),
+                state.get("pipeline_version", "N/A"),
             )
 
         console.print(table)
@@ -147,6 +158,7 @@ def status() -> None:
         console.print(f"[bold red]❌ Failed to get status: {e}[/bold red]")
         logging.debug("Full exception details:", exc_info=True)
         raise typer.Exit(code=1)
+
 
 @app.command()
 def check_config() -> None:

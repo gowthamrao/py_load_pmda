@@ -5,17 +5,17 @@ from pathlib import Path
 import pandas as pd
 
 # Add the src directory to the Python path to allow imports from py_load_pmda
-sys.path.insert(0, 'src')
+sys.path.insert(0, "src")
 
 from py_load_pmda.parser import ReviewReportsParser
 
 # Set up basic logging to see the parser's output
 logging.basicConfig(level=logging.INFO)
 # Prevent pandas from truncating long text columns
-pd.set_option('display.max_colwidth', None)
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_columns', None)
-pd.set_option('display.width', 200)
+pd.set_option("display.max_colwidth", None)
+pd.set_option("display.max_rows", None)
+pd.set_option("display.max_columns", None)
+pd.set_option("display.width", 200)
 
 
 def analyze_pdf(file_path: Path):
@@ -39,7 +39,7 @@ def analyze_pdf(file_path: Path):
         if all_tables:
             print(f"\n--- EXTRACTED {len(all_tables)} TABLES ---")
             for i, table_df in enumerate(all_tables):
-                print(f"\n--- Table {i+1} ---")
+                print(f"\n--- Table {i + 1} ---")
                 print(table_df.to_string())
             print("--- END OF TABLES ---")
         else:
@@ -47,6 +47,7 @@ def analyze_pdf(file_path: Path):
 
     except Exception as e:
         print(f"An error occurred during parsing: {e}")
+
 
 if __name__ == "__main__":
     # Path is now relative to the script's location inside py-load-pmda

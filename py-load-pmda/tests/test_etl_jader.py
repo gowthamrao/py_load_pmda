@@ -4,13 +4,15 @@ from typing import Any
 import pandas as pd
 import psycopg2
 import pytest
+from typer.testing import CliRunner
+
 from py_load_pmda.cli import app
 from py_load_pmda.config import load_config
 from py_load_pmda.parser import JaderParser
 from py_load_pmda.transformer import JaderTransformer
-from typer.testing import CliRunner
 
 runner = CliRunner()
+
 
 @pytest.fixture(scope="module")
 def jader_test_zip() -> Path:
@@ -19,10 +21,12 @@ def jader_test_zip() -> Path:
     assert p.exists(), "Test fixture 'test_jader_pipeline.zip' not found!"
     return p
 
+
 @pytest.fixture(scope="module")
 def jader_parser() -> JaderParser:
     """Fixture to provide a JaderParser instance."""
     return JaderParser()
+
 
 @pytest.fixture(scope="module")
 def jader_transformer() -> JaderTransformer:
@@ -52,7 +56,9 @@ def test_jader_parser(jader_parser: JaderParser, jader_test_zip: Path) -> None:
     assert "原疾患等" in parsed_data["jader_hist"].columns
 
 
-def test_jader_transformer(jader_transformer: JaderTransformer, jader_parser: JaderParser, jader_test_zip: Path) -> None:
+def test_jader_transformer(
+    jader_transformer: JaderTransformer, jader_parser: JaderParser, jader_test_zip: Path
+) -> None:
     """
     Test that the new JaderTransformer correctly transforms the parsed data.
     """
@@ -79,13 +85,13 @@ def test_jader_transformer(jader_transformer: JaderTransformer, jader_parser: Ja
             assert "identification_number" in df.columns
         if table_name == "jader_drug":
             assert "drug_name" in df.columns
-            assert "drug_id" in df.columns # Check for generated ID
+            assert "drug_id" in df.columns  # Check for generated ID
         if table_name == "jader_reac":
             assert "adverse_event_name" in df.columns
-            assert "reac_id" in df.columns # Check for generated ID
+            assert "reac_id" in df.columns  # Check for generated ID
         if table_name == "jader_hist":
             assert "past_medical_history" in df.columns
-            assert "hist_id" in df.columns # Check for generated ID
+            assert "hist_id" in df.columns  # Check for generated ID
 
     # 3. Check relationships
     demo_ids = transformed_data["jader_demo"]["identification_number"]
@@ -105,7 +111,11 @@ def test_jader_cli_pipeline(jader_test_zip: Path, mocker: Any) -> None:
     # This prevents the test from trying to hit the actual PMDA website.
     mocker.patch(
         "py_load_pmda.extractor.JaderExtractor.extract",
-        return_value=(jader_test_zip, "http://dummy.url/test_jader_pipeline.zip", {"etag": "dummy-etag"}),
+        return_value=(
+            jader_test_zip,
+            "http://dummy.url/test_jader_pipeline.zip",
+            {"etag": "dummy-etag"},
+        ),
     )
 
     # --- Step 1: Initialize the database ---
@@ -147,7 +157,9 @@ def test_jader_cli_pipeline(jader_test_zip: Path, mocker: Any) -> None:
         assert gender == "男性"
 
         # Check state table
-        cur.execute("SELECT status, last_watermark->>'etag' FROM public.ingestion_state WHERE dataset_id = 'jader';")
+        cur.execute(
+            "SELECT status, last_watermark->>'etag' FROM public.ingestion_state WHERE dataset_id = 'jader';"
+        )
         state_result = cur.fetchone()
         assert state_result is not None
         state_status, etag = state_result

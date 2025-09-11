@@ -81,5 +81,6 @@ class TestLogging(unittest.TestCase):
         self.assertIn("INFO", log_output)
         self.assertIn(test_message, log_output)
 
+
 if __name__ == "__main__":
     unittest.main()

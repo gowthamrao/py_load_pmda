@@ -23,6 +23,7 @@ class RedshiftAdapter(LoaderInterface):
     1. Data is uploaded to an S3 bucket as a Parquet file.
     2. A COPY command is executed in Redshift to load the data from S3.
     """
+
     def __init__(self) -> None:
         self.conn: Optional[redshift_connector.Connection] = None
         self.s3_staging_bucket: Optional[str] = None
@@ -118,7 +119,7 @@ class RedshiftAdapter(LoaderInterface):
 
                     create_table_sql = f"""
                     CREATE TABLE IF NOT EXISTS {schema_name}.{table_name} (
-                        {', '.join(col_defs)}
+                        {", ".join(col_defs)}
                     );
                     """
                     cursor.execute(create_table_sql)
@@ -161,7 +162,9 @@ class RedshiftAdapter(LoaderInterface):
             raise ValueError("Mode must be either 'append' or 'overwrite'.")
 
         if not self.s3_staging_bucket or not self.iam_role:
-            raise ValueError("s3_staging_bucket and iam_role must be provided in connection_details")
+            raise ValueError(
+                "s3_staging_bucket and iam_role must be provided in connection_details"
+            )
 
         s3_client = boto3.client("s3")
         s3_key = f"staging/{schema}_{target_table}_{uuid.uuid4()}.parquet"
@@ -205,8 +208,9 @@ class RedshiftAdapter(LoaderInterface):
             try:
                 s3_client.delete_object(Bucket=self.s3_staging_bucket, Key=s3_key)
             except Exception as e:
-                logging.error(f"Failed to delete S3 object s3://{self.s3_staging_bucket}/{s3_key}: {e}")
-
+                logging.error(
+                    f"Failed to delete S3 object s3://{self.s3_staging_bucket}/{s3_key}: {e}"
+                )
 
     def execute_merge(
         self, staging_table: str, target_table: str, primary_keys: List[str], schema: str
@@ -221,7 +225,9 @@ class RedshiftAdapter(LoaderInterface):
         if not primary_keys:
             raise ValueError("primary_keys must be provided for a merge operation.")
 
-        logging.info(f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'...")
+        logging.info(
+            f"Merging data from '{schema}.{staging_table}' to '{schema}.{target_table}'..."
+        )
 
         with self.conn.cursor() as cursor:
             try:
@@ -234,7 +240,9 @@ class RedshiftAdapter(LoaderInterface):
                 table_cols = [row[0] for row in cursor.fetchall()]
 
                 if not table_cols:
-                    logging.warning(f"Staging table '{schema}.{staging_table}' has no columns or does not exist. Skipping merge.")
+                    logging.warning(
+                        f"Staging table '{schema}.{staging_table}' has no columns or does not exist. Skipping merge."
+                    )
                     return
 
                 # Construct the MERGE statement
@@ -283,7 +291,9 @@ class RedshiftAdapter(LoaderInterface):
                 return cast(Dict[str, Any], result[0])
             return {}
 
-    def update_state(self, dataset_id: str, state: Dict[str, Any], status: str, schema: str) -> None:
+    def update_state(
+        self, dataset_id: str, state: Dict[str, Any], status: str, schema: str
+    ) -> None:
         """
         Update the ingestion state for a dataset in Redshift.
         This method does NOT commit the transaction.
@@ -295,7 +305,7 @@ class RedshiftAdapter(LoaderInterface):
         now = datetime.now(timezone.utc)
         last_watermark = json.dumps(state)
         # Redshift does not support TIMESTAMPTZ in the same way, handle None for failed runs
-        last_successful_ts = now if status == 'SUCCESS' else None
+        last_successful_ts = now if status == "SUCCESS" else None
 
         # Redshift ON CONFLICT syntax is different, using a merge-like pattern
         # For simplicity, we use a DELETE + INSERT pattern here as well.
@@ -312,9 +322,10 @@ class RedshiftAdapter(LoaderInterface):
                 )
                 VALUES (%s, %s, %s, %s, %s, %s);
                 """
-                cursor.execute(insert_sql, (
-                    dataset_id, now, last_successful_ts, status, last_watermark, pipeline_version
-                ))
+                cursor.execute(
+                    insert_sql,
+                    (dataset_id, now, last_successful_ts, status, last_watermark, pipeline_version),
+                )
                 logging.info(f"State for dataset '{dataset_id}' updated with status '{status}'.")
             except redshift_connector.Error as e:
                 logging.error(f"Error updating state for dataset '{dataset_id}': {e}")

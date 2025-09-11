@@ -1,3 +1,7 @@
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
 [project]
 name = "py-load-pmda"
 version = "0.1.0"
@@ -7,6 +11,16 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.12, <4.0"
+keywords = ["pmda", "etl", "regulatory", "japan", "ohdsi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
 dependencies = [
     "pandas>=2.3.2,<3.0.0",
     "typer[all]>=0.17.4,<0.18.0",
@@ -23,6 +37,10 @@ dependencies = [
     "jpdatetime>=1.5.0,<2.0.0",
     "lxml>=5.2.2,<6.0.0"
 ]
+
+[project.urls]
+Homepage = "https://github.com/ohdsi/py-load-pmda"
+Repository = "https://github.com/ohdsi/py-load-pmda"
 
 [project.optional-dependencies]
 postgres = [
@@ -64,10 +82,6 @@ testcontainers = {version = ">=4.13.0,<5.0.0", extras = ["postgres"]}
 psycopg2-binary = ">=2.9.9,<3.0.0"
 slack_sdk = ">=3.20.0,<4.0.0"
 pytest-xdist = ">=3.5.0,<4.0.0"
-
-[build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 # Set the maximum line length to 100.
