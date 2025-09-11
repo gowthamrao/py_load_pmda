@@ -1,0 +1,113 @@
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[project]
+name = "py-load-pmda"
+version = "0.1.0"
+description = "A Python package for ETL of regulatory data from the Japanese PMDA."
+authors = [
+    {name = "Gowtham Rao", email = "rao@ohdsi.org"}
+]
+readme = "README.md"
+requires-python = ">=3.12, <4.0"
+keywords = ["pmda", "etl", "regulatory", "japan", "ohdsi"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "pandas>=2.3.2,<3.0.0",
+    "typer[all]>=0.17.4,<0.18.0",
+    "PyYAML>=6.0,<7.0",
+    "requests>=2.31.0,<3.0.0",
+    "beautifulsoup4>=4.12.3,<5.0.0",
+    "openpyxl>=3.1.2,<4.0.0",
+    "tabula-py>=2.9.0,<3.0.0",
+    "chardet>=5.2.0,<6.0.0",
+    "pdfplumber>=0.10.3,<0.11.0",
+    "pypdf>=4.0.0,<5.0.0",
+    "pyarrow>=16.0.0,<17.0.0",
+    "python-json-logger>=2.0.7,<3.0.0",
+    "jpdatetime>=1.5.0,<2.0.0",
+    "lxml>=5.2.2,<6.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/ohdsi/py-load-pmda"
+Repository = "https://github.com/ohdsi/py-load-pmda"
+
+[project.optional-dependencies]
+postgres = [
+    "psycopg2-binary>=2.9.9,<3.0.0"
+]
+redshift = [
+    "redshift-connector>=2.0.918,<3.0.0",
+    "boto3>=1.34.0,<2.0.0"
+]
+bigquery = [
+    "google-cloud-bigquery>=3.0,<4.0",
+    "google-cloud-storage>=2.0,<3.0",
+]
+slack = [
+    "slack_sdk>=3.20.0,<4.0.0"
+]
+
+
+[project.scripts]
+py-load-pmda = "py_load_pmda.cli:app"
+
+[tool.poetry]
+packages = [{include = "py_load_pmda", from = "src"}]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0.0,<9.0.0"
+pytest-mock = ">=3.12.0,<4.0.0"
+requests-mock = ">=1.12.1,<2.0.0"
+python-dotenv = ">=1.0.0,<2.0.0"
+ruff = ">=0.5.5,<0.6.0"
+mypy = ">=1.11.0,<2.0.0"
+pandas-stubs = ">=2.0.0,<3.0.0"
+types-psycopg2 = ">=2.9.21,<3.0.0"
+types-PyYAML = ">=6.0.12,<7.0.0"
+types-requests = ">=2.31.0,<3.0.0"
+types-beautifulsoup4 = ">=4.12.0,<5.0.0"
+moto = {version = ">=5.0.0,<6.0.0", extras = ["s3"]}
+testcontainers = {version = ">=4.13.0,<5.0.0", extras = ["postgres"]}
+psycopg2-binary = ">=2.9.9,<3.0.0"
+slack_sdk = ">=3.20.0,<4.0.0"
+pytest-xdist = ">=3.5.0,<4.0.0"
+
+[tool.ruff]
+# Set the maximum line length to 100.
+line-length = 100
+# Enable the isort rules.
+
+[tool.ruff.lint]
+# A sensible default set of rules
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+markers = [
+    "integration: marks tests as integration tests, which are slower and require external services (like Docker).",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "boto3.*",
+    "redshift_connector.*",
+    "tabula.*"
+]
+ignore_missing_imports = true

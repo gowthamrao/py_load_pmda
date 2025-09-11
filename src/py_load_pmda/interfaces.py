@@ -1,0 +1,2 @@
+class LoaderInterface:
+    pass

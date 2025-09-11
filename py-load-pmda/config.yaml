@@ -1,0 +1,175 @@
+# Configuration file for py-load-pmda
+#
+# This file contains settings for the database connection and for each
+# dataset to be processed. Settings can be overridden by environment variables.
+
+logging:
+  # The logging level for the application.
+  # Can be overridden by the PMDA_LOG_LEVEL environment variable.
+  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+
+# Alerting configuration. Defines where to send alerts on critical failures.
+alerting:
+  # A list of alerters to use.
+  - type: "log" # The "log" alerter writes messages to the standard log at ERROR level.
+  # --- Example for Slack Alerter ---
+  # The token MUST be provided via the PMDA_SLACK_TOKEN environment variable for security.
+  # - type: "slack"
+  #   token: "env(PMDA_SLACK_TOKEN)" # This syntax is hypothetical
+  #   channel: "#your-alerts-channel"
+
+# Extractor settings control the behavior of web scraping and file downloads.
+# These settings help ensure "polite" scraping and robust error handling.
+extractor_settings:
+  # The time to wait (in seconds) between consecutive requests to the PMDA server.
+  rate_limit_seconds: 1.0
+
+  # The number of times to retry a failed HTTP request.
+  retries: 3
+
+  # The base factor for exponential backoff between retries.
+  # The wait time will be: backoff_factor * (2 ** (attempt - 1))
+  backoff_factor: 0.5
+
+database:
+  # The type of database adapter to use.
+  # Options: "postgres", "redshift", "bigquery"
+  type: "postgres"
+
+  # --- Connection details for PostgreSQL / Redshift ---
+  # These settings can be overridden by environment variables.
+  # For local development, create a `.env` file in the project root and add:
+  # PMDA_DB_HOST=localhost
+  # PMDA_DB_PORT=5432
+  # PMDA_DB_USER=your_user
+  # PMDA_DB_PASSWORD=your_password
+  # PMDA_DB_DBNAME=pmda_db
+  #
+  # The password is intentionally omitted from this file for security.
+  # It MUST be provided via the PMDA_DB_PASSWORD environment variable.
+  host: "localhost"
+  port: 5432
+  user: "admin"
+  dbname: "pmda_db"
+
+  # --- Connection details for BigQuery ---
+  # These settings can be overridden by environment variables:
+  # PMDA_BIGQUERY_PROJECT, PMDA_BIGQUERY_GCS_BUCKET, PMDA_BIGQUERY_LOCATION
+  #
+  # project: "your-gcp-project-id"
+  # gcs_bucket: "your-gcs-bucket-for-staging"
+  # location: "US" # Optional: The location for your BigQuery datasets (e.g., "US", "EU")
+
+datasets:
+  approvals:
+    # Class names for the ETL components for this dataset
+    extractor: "ApprovalsExtractor"
+    parser: "ApprovalsParser"
+    transformer: "ApprovalsTransformer"
+
+    # Target table and schema in the database
+    table_name: "pmda_approvals"
+    schema_name: "public"
+
+    # Load strategy configuration
+    load_mode: "overwrite" # or "append", "merge"
+    primary_key: ["approval_id"] # for merge mode
+
+    # Data quality validation rules to be applied after transformation.
+    validation:
+      - column: "approval_id"
+        check: "not_null"
+      - column: "approval_id"
+        check: "is_unique"
+      - column: "approval_date"
+        check: "not_null"
+      - column: "approval_date"
+        check: "has_type"
+        type: "datetime"
+      - column: "application_type"
+        check: "is_in_set"
+        allowed_values: ["医薬品", "医療機器", "再生医療等製品", "体外診断用医薬品"]
+
+  jader:
+    extractor: "JaderExtractor"
+    parser: "JaderParser"
+    transformer: "JaderTransformer"
+    schema_name: "public"
+    load_mode: "merge" # Changed from "append" to "merge"
+    # The JADER dataset is normalized into four tables.
+    # The transformer produces a dictionary of DataFrames, where keys match table names.
+    # Primary keys are defined for each table to enable merge (upsert) operations.
+    tables:
+      jader_demo:
+        primary_key: ["identification_number"]
+        validation:
+          - column: "identification_number"
+            check: "not_null"
+      jader_drug:
+        primary_key: ["drug_id"]
+      jader_reac:
+        primary_key: ["reac_id"]
+      jader_hist:
+        primary_key: ["hist_id"]
+
+  package_inserts:
+    extractor: "PackageInsertsExtractor"
+    parser: "PackageInsertsParser"
+    transformer: "PackageInsertsTransformer"
+    table_name: "pmda_package_inserts"
+    schema_name: "public"
+    load_mode: "merge"
+    primary_key: ["document_id"]
+    columns:
+      document_id: "VARCHAR(64)"
+      raw_data_full: "JSONB"
+      _meta_source_url: "TEXT"
+      _meta_extraction_ts_utc: "TIMESTAMPTZ"
+      _meta_load_ts_utc: "TIMESTAMPTZ"
+      _meta_pipeline_version: "VARCHAR(50)"
+      _meta_source_content_hash: "VARCHAR(64)"
+
+  xml_report:
+    # This is a hypothetical dataset to demonstrate the XML parser.
+    # In a real scenario, the extractor would download an XML file.
+    # For this test, the orchestrator will be fed the local fixture file.
+    extractor: "BaseExtractor" # Using a generic extractor for simplicity
+    parser: "XMLParser"
+    transformer: "BaseTransformer" # Using a generic transformer
+
+    # The XMLParser requires an 'xpath' parameter to be passed to its 'parse' method.
+    # This is defined here and will be passed by the orchestrator.
+    parser_args:
+      xpath: "./products/product"
+
+    table_name: "pmda_xml_reports"
+    schema_name: "public"
+    load_mode: "overwrite"
+    primary_key: ["id"]
+
+  review_reports:
+    extractor: "ReviewReportsExtractor"
+    parser: "ReviewReportsParser"
+    transformer: "ReviewReportsTransformer"
+    table_name: "pmda_review_reports"
+    schema_name: "public"
+    load_mode: "merge"
+    primary_key: ["document_id"]
+    columns:
+      # Structured data extracted from the report
+      document_id: "VARCHAR(64)"
+      brand_name_jp: "TEXT"
+      generic_name_jp: "TEXT"
+      applicant_name_jp: "TEXT"
+      application_date: "DATE"
+      approval_date: "DATE"
+      review_summary_text: "TEXT"
+
+      # High-fidelity raw data and metadata for auditability
+      raw_data_full: "JSONB"
+      _meta_source_url: "TEXT"
+      _meta_extraction_ts_utc: "TIMESTAMPTZ"
+      _meta_load_ts_utc: "TIMESTAMPTZ"
+      _meta_pipeline_version: "VARCHAR(50)"
+      _meta_source_content_hash: "VARCHAR(64)"
