@@ -108,6 +108,7 @@ class ApprovalsTransformer(BaseTransformer):
                     "original_values": original_dict,
                 },
                 ensure_ascii=False,
+                default=str,
             )
 
         df["raw_data_full"] = df.apply(create_raw_data_full, axis=1)
