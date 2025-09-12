@@ -112,4 +112,11 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
 
     logging.info(f"Extractor settings loaded: {config['extractor_settings']}")
 
+    # After all overrides, check for mandatory password
+    if not config.get("database", {}).get("password"):
+        raise ValueError(
+            "Database password not provided. "
+            "Set the PMDA_DB_PASSWORD environment variable."
+        )
+
     return config
