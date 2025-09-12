@@ -168,10 +168,28 @@ PMDA_REVIEW_REPORTS_SCHEMA = {
 }
 
 
+# Schema for the integration test of the DataValidator
+VALIDATION_TEST_SCHEMA = {
+    "schema_name": "public",
+    "tables": {
+        "validation_test_table": {
+            "columns": {
+                "id": "INTEGER",
+                "category": "TEXT",
+                "value": "INTEGER",
+            },
+            "primary_key": "id",
+        }
+    },
+}
+
+
 # A dictionary to map dataset IDs to their schema definitions
 DATASET_SCHEMAS = {
     "approvals": PMDA_APPROVALS_SCHEMA,
     "jader": PMDA_JADER_SCHEMA,
     "package_inserts": PMDA_PACKAGE_INSERTS_SCHEMA,
     "review_reports": PMDA_REVIEW_REPORTS_SCHEMA,
+    # Add the test schema so the orchestrator can find it during tests
+    "validation_test_dataset": VALIDATION_TEST_SCHEMA,
 }
