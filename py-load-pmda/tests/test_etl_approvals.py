@@ -1,83 +1,52 @@
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pandas as pd
 import pytest
+from requests_mock import Mocker
 
 from py_load_pmda.extractor import ApprovalsExtractor
 from py_load_pmda.transformer import ApprovalsTransformer
 
 
-@pytest.fixture
-def mock_pmda_pages(mocker: Any) -> None:
-    """Mocks the requests.get calls to return fake PMDA HTML pages."""
+def test_approvals_extractor(requests_mock: Mocker, tmp_path: Path) -> None:
+    """
+    Tests the ApprovalsExtractor logic by mocking the multi-page navigation
+    and download process.
+    """
+    # 1. Mock the initial landing page to find the link for the target year.
+    # The extractor should be able to find the link to the 2025 page.
+    requests_mock.get(
+        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0010.html",
+        text='<html><body><a href="/review-services/drug-reviews/review-information/p-drugs/2025_page.html">2025年度</a></body></html>',
+    )
 
-    # Using a class to better structure the mock responses
-    class MockResponse:
-        def __init__(
-            self,
-            text: str = "",
-            status_code: int = 200,
-            headers: Optional[Dict[str, str]] = None,
-            content: Optional[bytes] = None,
-            apparent_encoding: str = "utf-8",
-        ) -> None:
-            self.text = text
-            self.status_code = status_code
-            self.headers = headers or {}
-            self._content = content or b""
-            self.apparent_encoding = apparent_encoding
-            self.encoding: Optional[str] = None  # Can be set by the calling code
+    # 2. Mock the 2025-specific page to find the link to the Excel file.
+    # The link text "別表" (Appendix) should lead to the file download.
+    requests_mock.get(
+        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/2025_page.html",
+        text='<html><body><a href="/files/000276012.xlsx">別表</a></body></html>',
+    )
 
-        def raise_for_status(self) -> None:
-            if self.status_code >= 400:
-                raise Exception("HTTP Error")
+    # 3. Mock the Excel file download itself.
+    # Provide dummy content and an ETag for caching verification.
+    file_content = b"dummy excel content"
+    file_url = "https://www.pmda.go.jp/files/000276012.xlsx"
+    requests_mock.get(file_url, content=file_content, headers={"ETag": "test-etag"})
 
-        def iter_content(self, chunk_size: int) -> Any:
-            yield self._content
-
-        def __enter__(self) -> "MockResponse":
-            return self
-
-        def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-            pass
-
-    mock_responses: Dict[str, MockResponse] = {
-        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0010.html": MockResponse(
-            text="""
-            <html><body>
-                <a href="/review-services/drug-reviews/review-information/p-drugs/0039.html">2025年度</a>
-            </body></html>
-            """
-        ),
-        "https://www.pmda.go.jp/review-services/drug-reviews/review-information/p-drugs/0039.html": MockResponse(
-            text="""
-            <html><body>
-                <a href="/files/000276012.xlsx">別表</a>
-            </body></html>
-            """
-        ),
-        "https://www.pmda.go.jp/files/000276012.xlsx": MockResponse(
-            content=b"dummy excel content", headers={"ETag": "test-etag"}
-        ),
-    }
-
-    def get_side_effect(url: str, **kwargs: Any) -> MockResponse:
-        return mock_responses.get(url, MockResponse(status_code=404))
-
-    mocker.patch("requests.get", side_effect=get_side_effect)
-
-
-@pytest.mark.skip(reason="Test is brittle and fails due to changes in real downloaded file.")
-def test_approvals_extractor(mock_pmda_pages: Any, tmp_path: Path) -> None:
-    """Tests the ApprovalsExtractor logic."""
+    # --- Execute ---
     extractor = ApprovalsExtractor(cache_dir=str(tmp_path))
+    # We pass an empty state, simulating the first run for this year.
     file_path, source_url, new_state = extractor.extract(year=2025, last_state={})
 
+    # --- Assert ---
+    # Verify the correct file was downloaded
     assert file_path.name == "000276012.xlsx"
-    assert source_url == "https://www.pmda.go.jp/files/000276012.xlsx"
-    assert file_path.read_bytes() == b"dummy excel content"
+    assert source_url == file_url
+    assert file_path.read_bytes() == file_content
+
+    # Verify the new state dictionary for caching
     assert "etag" in new_state
     assert new_state["etag"] == "test-etag"
 
