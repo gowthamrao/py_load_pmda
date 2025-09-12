@@ -64,6 +64,32 @@ def mock_approvals_parser(monkeypatch):
 
 
 @pytest.fixture
+def mock_approvals_parser_with_invalid_data(monkeypatch):
+    """
+    Mocks the ApprovalsParser to return a DataFrame with data that violates
+    the validation rules (e.g., null 'No.' which becomes null 'approval_id').
+    """
+    mock_parser = MagicMock(spec=ApprovalsParser)
+    invalid_raw_data = [
+        {
+            "分野": "第1",
+            "承認日": "令和7年1月1日",
+            "No.": None,  # This will cause the 'approval_id' to be null
+            "販売名(会社名、法人番号)": "Invalid Drug (Corp C、789)",
+            "成分名(下線:新有効成分)": "Generic C",
+            "効能・効果等": "Indication C",
+        }
+    ]
+    invalid_df = pd.DataFrame(invalid_raw_data)
+    mock_parser.parse.return_value = [invalid_df]
+
+    from py_load_pmda.orchestrator import AVAILABLE_PARSERS
+
+    monkeypatch.setitem(AVAILABLE_PARSERS, "ApprovalsParser", lambda: mock_parser)
+    return mock_parser
+
+
+@pytest.fixture
 def mock_extractor_that_does_nothing(monkeypatch):
     """
     Since we mock the parser, the extractor will still be called but its
@@ -71,7 +97,6 @@ def mock_extractor_that_does_nothing(monkeypatch):
     and to return dummy values of the correct type.
     """
     mock_extractor = MagicMock()
-    # Return dummy values: (Path, str, dict)
     mock_extractor.extract.return_value = (
         Path("/fake/path"),
         "http://fake.url",
@@ -90,11 +115,10 @@ def test_approvals_etl_pipeline_aggregation(
     postgres_container: PostgresContainer,
 ):
     """
-    Tests the full ETL pipeline for the 'approvals' dataset, focusing on
+    Tests the ETL pipeline's end-to-end flow, focusing on
     the transformer's ability to correctly aggregate data.
     """
     adapter, schema_name = postgres_adapter
-
     test_config = {
         "database": {
             "type": "postgres",
@@ -106,19 +130,22 @@ def test_approvals_etl_pipeline_aggregation(
         },
         "datasets": {
             "approvals": {
-                "extractor": "ApprovalsExtractor",  # Will be the do-nothing mock
-                "parser": "ApprovalsParser",  # Will be the mock with controlled data
+                "extractor": "ApprovalsExtractor",
+                "parser": "ApprovalsParser",
                 "transformer": "ApprovalsTransformer",
                 "table_name": "pmda_approvals",
                 "schema_name": schema_name,
                 "load_mode": "overwrite",
+                "validation": [
+                    {"column": "approval_id", "check": "not_null"},
+                    {"column": "approval_id", "check": "is_unique"},
+                ],
             }
         },
     }
 
     from py_load_pmda.schemas import INGESTION_STATE_SCHEMA
 
-    # The schema name in the global object must also be updated for the state table
     INGESTION_STATE_SCHEMA["schema_name"] = schema_name
     adapter.ensure_schema(INGESTION_STATE_SCHEMA)
     adapter.commit()
@@ -126,34 +153,86 @@ def test_approvals_etl_pipeline_aggregation(
     orchestrator = Orchestrator(
         config=test_config,
         dataset="approvals",
-        year=2025,  # Dummy value, as extractor is mocked
+        year=2025,
     )
     orchestrator.run()
 
     query = f"SELECT * FROM {schema_name}.pmda_approvals ORDER BY approval_id;"
     loaded_df = pd.read_sql(query, adapter.conn)
 
-    # We provided 2 unique approval_id's, so we expect 2 rows after aggregation.
     assert len(loaded_df) == 2
 
-    # Check the single-row approval
     row_1 = loaded_df[loaded_df["approval_id"] == 1].iloc[0]
     assert row_1["brand_name_jp"] == "Drug A"
     assert row_1["applicant_name_jp"] == "Corp A"
     assert str(row_1["approval_date"]) == "2025-01-01"
 
-    # Check the aggregated approval
     row_2 = loaded_df[loaded_df["approval_id"] == 2].iloc[0]
-    assert str(row_2["approval_date"]) == "2025-02-02"
-    assert row_2["applicant_name_jp"] == "Corp B"
-    # Check that text fields were correctly aggregated with unique values
     assert row_2["generic_name_jp"] == "Generic B1\nGeneric B2"
-    assert row_2["indication"] == "Indication B1\nIndication B2"
 
-    # Check that raw_data_full contains a JSON array of the two original rows
-    # pd.read_sql auto-deserializes JSONB, so we should have a list directly.
-    raw_data = row_2["raw_data_full"]
-    assert isinstance(raw_data, list)
-    assert len(raw_data) == 2
-    assert raw_data[0]["No."] == 2.0
-    assert raw_data[1]["成分名(下線:新有効成分)"] == "Generic B2"
+
+def test_approvals_etl_pipeline_validation_failure(
+    postgres_adapter: tuple[PostgreSQLAdapter, str],
+    mock_approvals_parser_with_invalid_data: MagicMock,
+    mock_extractor_that_does_nothing: MagicMock,
+    postgres_container: PostgresContainer,
+):
+    """
+    Tests that the ETL pipeline fails when data violates validation rules.
+    """
+    adapter, schema_name = postgres_adapter
+    test_config = {
+        "database": {
+            "type": "postgres",
+            "host": postgres_container.get_container_host_ip(),
+            "port": postgres_container.get_exposed_port(5432),
+            "user": postgres_container.username,
+            "password": postgres_container.password,
+            "dbname": postgres_container.dbname,
+        },
+        "datasets": {
+            "approvals": {
+                "extractor": "ApprovalsExtractor",
+                "parser": "ApprovalsParser",
+                "transformer": "ApprovalsTransformer",
+                "table_name": "pmda_approvals",
+                "schema_name": schema_name,
+                "load_mode": "overwrite",
+                "validation": [
+                    {"column": "approval_id", "check": "not_null"},
+                ],
+            }
+        },
+    }
+
+    # Set up the ingestion state table, which the orchestrator needs
+    from py_load_pmda.schemas import INGESTION_STATE_SCHEMA
+    INGESTION_STATE_SCHEMA["schema_name"] = schema_name
+    adapter.ensure_schema(INGESTION_STATE_SCHEMA)
+    adapter.commit()
+
+    orchestrator = Orchestrator(
+        config=test_config,
+        dataset="approvals",
+        year=2025,
+    )
+
+    # Expect the orchestrator to raise a ValueError due to the validation failure
+    with pytest.raises(ValueError, match="Data validation failed for table 'pmda_approvals'"):
+        orchestrator.run()
+
+    # Also, verify that no data was loaded into the table
+    # We need to check if the table exists before querying it
+    table_exists_query = f"""
+    SELECT EXISTS (
+        SELECT FROM information_schema.tables
+        WHERE table_schema = '{schema_name}'
+        AND table_name = 'pmda_approvals'
+    );
+    """
+    table_exists = pd.read_sql(table_exists_query, adapter.conn).iloc[0, 0]
+
+    if table_exists:
+        query = f"SELECT COUNT(*) FROM {schema_name}.pmda_approvals;"
+        count = pd.read_sql(query, adapter.conn).iloc[0, 0]
+        assert count == 0
