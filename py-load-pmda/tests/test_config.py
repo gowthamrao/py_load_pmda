@@ -23,10 +23,11 @@ def temp_config_file(tmp_path: Path) -> Path:
     return config_path
 
 
-def test_load_config_from_file(temp_config_file: Path) -> None:
+def test_load_config_from_file(temp_config_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """
     Tests that the configuration is loaded correctly from a YAML file.
     """
+    monkeypatch.setenv("PMDA_DB_PASSWORD", "testpassword")
     config = load_config(path=str(temp_config_file))
     assert config["database"]["host"] == "localhost"
     assert config["database"]["port"] == 5432
@@ -41,6 +42,7 @@ def test_load_config_env_override(temp_config_file: Path, monkeypatch: pytest.Mo
     monkeypatch.setenv("PMDA_DB_HOST", "db.example.com")
     monkeypatch.setenv("PMDA_DB_PORT", "1234")
     monkeypatch.setenv("PMDA_DB_USER", "produser")
+    monkeypatch.setenv("PMDA_DB_PASSWORD", "prodpassword")
 
     config = load_config(path=str(temp_config_file))
 

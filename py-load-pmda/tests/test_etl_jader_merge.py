@@ -96,11 +96,12 @@ updated_data = {
 }
 
 
-def test_jader_pipeline_merge_logic(mock_db_adapter, mock_etl_components, mocker):
+def test_jader_pipeline_merge_logic(mock_db_adapter, mock_etl_components, mocker, monkeypatch):
     """
     Tests that the JADER ETL pipeline correctly uses the merge (upsert) strategy
     for its multiple tables when `load_mode: merge` is set in the config.
     """
+    monkeypatch.setenv("PMDA_DB_PASSWORD", "testpassword")
     _, mock_parser, mock_transformer = mock_etl_components
 
     # --- First Run (Initial Load) ---

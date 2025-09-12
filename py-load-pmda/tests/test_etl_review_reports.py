@@ -106,11 +106,13 @@ def test_review_reports_pipeline_e2e(
     mock_get_db_adapter,
     mock_db_adapter_fixture,
     html_fixture,
+    monkeypatch,
 ):
     """
     A true end-to-end integration test for the 'review_reports' pipeline.
     This test now uses a corrected HTML fixture to validate the fixed extractor.
     """
+    monkeypatch.setenv("PMDA_DB_PASSWORD", "testpassword")
     runner = CliRunner()
     mock_get_db_adapter.return_value = mock_db_adapter_fixture
     mock_post.return_value.text = html_fixture
