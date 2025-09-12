@@ -80,14 +80,11 @@ def test_package_insert_extractor_finds_exact_match(tmp_path, mock_pmda_search):
     cache_dir = tmp_path / "cache"
     extractor = PackageInsertsExtractor(cache_dir=str(cache_dir))
 
-    # We want to find "ロキソニンSプラス" specifically.
-    # The current naive implementation finds the first link: loxonin_s.pdf
-    # The improved implementation should find: loxonin_s_plus.pdf
+    # We want to find "ロキソニンSプラス" specifically, not the first result.
     drug_to_find = "ロキソニンSプラス"
 
     downloaded_data, new_state = extractor.extract(drug_names=[drug_to_find], last_state={})
 
-    # This test will fail until the extractor logic is improved
     assert len(downloaded_data) == 1, "Should have downloaded exactly one file."
     file_path, source_url = downloaded_data[0]
 
@@ -103,3 +100,57 @@ def test_package_insert_extractor_finds_exact_match(tmp_path, mock_pmda_search):
     # Assert that the other, incorrect file was NOT downloaded
     wrong_file_path = cache_dir / "loxonin_s.pdf"
     assert not wrong_file_path.exists(), "Should not have downloaded the first PDF in the list."
+
+
+def test_package_insert_extractor_no_exact_match(tmp_path, mock_pmda_search):
+    """
+    GIVEN a search term that returns multiple results,
+    WHEN the PackageInsertsExtractor is run with a name that is not in the results,
+    THEN it should not download any files.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = PackageInsertsExtractor(cache_dir=str(cache_dir))
+
+    drug_to_find = "NonExistentDrug"
+    downloaded_data, new_state = extractor.extract(drug_names=[drug_to_find], last_state={})
+
+    assert len(downloaded_data) == 0, "Should not download any file if no exact match is found."
+    assert not (cache_dir / "loxonin_s.pdf").exists()
+    assert not (cache_dir / "loxonin_s_plus.pdf").exists()
+
+
+def test_package_insert_extractor_no_results_table(tmp_path, requests_mock):
+    """
+    GIVEN a search result page that is missing the results table,
+    WHEN the PackageInsertsExtractor is run,
+    THEN it should handle the case gracefully and not download any files.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = PackageInsertsExtractor(cache_dir=str(cache_dir))
+    search_url = extractor.search_url
+
+    # Mock a search result page without the expected table
+    mock_html = '<html><body><input name="nccharset" value="DUMMY_TOKEN"><div id="ContentMainArea"><p>No results found.</p></div></body></html>'
+    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
+    requests_mock.post(search_url, text=mock_html)
+
+    downloaded_data, new_state = extractor.extract(drug_names=["ロキソニン"], last_state={})
+
+    assert len(downloaded_data) == 0, "Should not download any file if the results table is missing."
+
+
+def test_package_insert_extractor_missing_token(tmp_path, requests_mock):
+    """
+    GIVEN a search page that is missing the 'nccharset' token,
+    WHEN the PackageInsertsExtractor runs,
+    THEN it should raise a ValueError.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = PackageInsertsExtractor(cache_dir=str(cache_dir))
+    search_url = extractor.search_url
+
+    # Mock the initial GET request to return a page without the token
+    requests_mock.get(search_url, text="<html><body><p>No token here.</p></body></html>")
+
+    with pytest.raises(ValueError, match="Could not find the 'nccharset' token on the search page."):
+        extractor.extract(drug_names=["ロキソニン"], last_state={})
