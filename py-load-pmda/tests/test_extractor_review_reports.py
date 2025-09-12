@@ -94,3 +94,62 @@ def test_review_report_extractor_finds_all_valid_reports(tmp_path, mock_pmda_rev
     # Ensure the other documents (distractor and unrelated) were not downloaded
     assert not (cache_dir / "document.pdf").exists()
     assert not (cache_dir / "unrelated.pdf").exists()
+
+
+def test_review_report_extractor_no_matching_links(tmp_path, requests_mock):
+    """
+    GIVEN a search result where a drug is found but has no review report links,
+    WHEN the extractor is run,
+    THEN it should not download any files.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = ReviewReportsExtractor(cache_dir=str(cache_dir))
+    search_url = extractor.search_url
+
+    mock_html = """
+    <!DOCTYPE html><html><body><div id="ContentMainArea"><table class="result_list_table"><tbody>
+        <tr>
+            <td>コレクチム軟膏0.5%</td><td>...</td><td>...</td><td>...</td>
+            <td><a href="/a.pdf">IF</a> <a href="/b.pdf">RMP</a></td>
+        </tr>
+    </tbody></table></div></body></html>
+    """
+    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
+    requests_mock.post(search_url, text=mock_html)
+
+    downloaded_data, _ = extractor.extract(drug_names=["コレクチム軟膏"], last_state={})
+
+    assert len(downloaded_data) == 0
+
+
+def test_review_report_extractor_no_matching_drug(tmp_path, mock_pmda_review_search):
+    """
+    GIVEN a search term that does not match any drug in the results,
+    WHEN the extractor is run,
+    THEN it should not download any files.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = ReviewReportsExtractor(cache_dir=str(cache_dir))
+
+    downloaded_data, _ = extractor.extract(drug_names=["NonExistentDrug"], last_state={})
+
+    assert len(downloaded_data) == 0
+
+
+def test_review_report_extractor_no_results_table(tmp_path, requests_mock):
+    """
+    GIVEN a search result page that is missing the results table,
+    WHEN the extractor is run,
+    THEN it should handle it gracefully and not download files.
+    """
+    cache_dir = tmp_path / "cache"
+    extractor = ReviewReportsExtractor(cache_dir=str(cache_dir))
+    search_url = extractor.search_url
+
+    mock_html = '<html><body><input name="nccharset" value="DUMMY_TOKEN"><div id="ContentMainArea"><p>No results found.</p></div></body></html>'
+    requests_mock.get(search_url, text='<html><body><input name="nccharset" value="DUMMY_TOKEN"></body></html>')
+    requests_mock.post(search_url, text=mock_html)
+
+    downloaded_data, _ = extractor.extract(drug_names=["コレクチム軟膏"], last_state={})
+
+    assert len(downloaded_data) == 0
