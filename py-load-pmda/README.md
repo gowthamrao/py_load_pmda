@@ -23,6 +23,10 @@ pip install py-load-pmda
 pip install py-load-pmda[postgres]
 ```
 
+## Development Setup
+
+For local development and running tests, you will need to have Docker installed and running. The integration tests use `testcontainers` to spin up a PostgreSQL database in a Docker container.
+
 ## Configuration
 
 Configuration is managed through a combination of a `config.yaml` file and environment variables.
