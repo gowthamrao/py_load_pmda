@@ -95,20 +95,25 @@ class ApprovalsTransformer:
         # Select only columns that exist in the dataframe to avoid errors during aggregation
         cols_to_agg = {k: v for k, v in agg_funcs.items() if k in df.columns}
 
-        # 5. Group by approval_id and aggregate
-        df_agg = df.groupby("approval_id").agg(cols_to_agg).reset_index()
+        # 5. Group by approval_id and aggregate. Do not drop rows where approval_id is NA.
+        df_agg = df.groupby("approval_id", dropna=False).agg(cols_to_agg).reset_index()
 
         # Rename the aggregated 'original_row' to 'raw_data_full'
         df_agg.rename(columns={"original_row": "raw_data_full"}, inplace=True)
 
-        # Cast approval_id to integer for correct data type
-        df_agg["approval_id"] = df_agg["approval_id"].astype(int)
+        # The approval_id might be a float if there were NaNs, so we can't cast to int yet.
+        # The validation step in the orchestrator will catch nulls.
+        # We can attempt to convert to a nullable integer type if needed, but for now,
+        # let's allow the validator to do its job.
+        df_agg["approval_id"] = pd.to_numeric(df_agg["approval_id"], errors="coerce").astype("Int64")
+
 
         # 6. Add metadata columns
         df_agg["_meta_load_ts_utc"] = datetime.now(timezone.utc)
         df_agg["_meta_source_url"] = self.source_url
         df_agg["_meta_pipeline_version"] = version("py-load-pmda")
-        df_agg["_meta_source_content_hash"] = df_agg["raw_data_full"].apply(
+        # Hash can fail on non-string data, ensure raw_data_full is a string
+        df_agg["_meta_source_content_hash"] = df_agg["raw_data_full"].astype(str).apply(
             lambda x: hashlib.sha256(x.encode("utf-8")).hexdigest()
         )
         df_agg["review_report_url"] = None  # Add missing column
@@ -129,6 +134,11 @@ class ApprovalsTransformer:
             "_meta_source_url",
             "_meta_pipeline_version",
         ]
+        # Ensure all final columns exist, adding missing ones with None
+        for col in final_columns:
+            if col not in df_agg.columns:
+                df_agg[col] = None
+
         return df_agg[final_columns]
 
 
