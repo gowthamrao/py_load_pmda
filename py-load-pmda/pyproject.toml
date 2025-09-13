@@ -83,6 +83,7 @@ testcontainers = {version = ">=4.13.0,<5.0.0", extras = ["postgres"]}
 psycopg2-binary = ">=2.9.9,<3.0.0"
 slack_sdk = ">=3.20.0,<4.0.0"
 pytest-xdist = ">=3.5.0,<4.0.0"
+pytest-cov = ">=4.0.0,<5.0.0"
 
 [tool.ruff]
 # Set the maximum line length to 100.
