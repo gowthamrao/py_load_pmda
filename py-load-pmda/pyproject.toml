@@ -64,6 +64,10 @@ slack = [
 py-load-pmda = "py_load_pmda.cli:app"
 
 [tool.poetry]
+name = "py-load-pmda"
+version = "0.1.0"
+description = "A Python package for ETL of regulatory data from the Japanese PMDA."
+authors = ["Gowtham Rao <rao@ohdsi.org>"]
 packages = [{include = "py_load_pmda", from = "src"}]
 
 [tool.poetry.group.dev.dependencies]
