@@ -110,13 +110,49 @@ class XMLParser:
             raise
 
 
+from py_load_pmda.schemas import PMDA_APPROVALS_SCHEMA
+
+
 class ApprovalsParser:
     """
     Parses the downloaded New Drug Approvals Excel file.
     """
 
     def __init__(self) -> None:
-        pass
+        self.expected_columns = list(
+            PMDA_APPROVALS_SCHEMA["tables"]["pmda_approvals"]["columns"].keys()
+        )
+
+    def _validate_schema(self, df: pd.DataFrame) -> None:
+        """
+        Validates that the DataFrame contains all columns expected to be
+        extracted from the source file. It does not check for metadata columns,
+        which are added by the Transformer.
+        """
+        # Get the columns that should be present after renaming
+        expected_source_columns = set(self.COLUMN_MAPPING.values())
+        # The 'remarks' column is in the mapping but not in the final schema, so remove it
+        expected_source_columns.discard("remarks")
+
+        missing_cols = expected_source_columns - set(df.columns)
+        if missing_cols:
+            raise ValueError(
+                f"DataFrame is missing columns that should have been parsed from the source: {missing_cols}"
+            )
+
+    COLUMN_MAPPING = {
+        "No.": "approval_id",
+        "申請区分": "application_type",
+        "販売名": "brand_name_jp",
+        "一般名": "generic_name_jp",
+        "申請者名": "applicant_name_jp",
+        "承認年月日": "approval_date",
+        "備考": "remarks",  # This column is not in the schema, will be dropped
+    }
+
+    def _rename_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Renames DataFrame columns based on the COLUMN_MAPPING."""
+        return df.rename(columns=self.COLUMN_MAPPING)
 
     def _find_header_row(self, df: pd.DataFrame, keyword: str, search_limit: int = 10) -> int:
         """Finds the header row index by searching for a keyword."""
@@ -124,7 +160,7 @@ class ApprovalsParser:
             # Normalize the row content by removing whitespace before searching
             normalized_row = row.astype(str).str.replace(r"\s+", "", regex=True)
             if normalized_row.str.contains(keyword, na=False).any():
-                return int(i)  # type: ignore
+                return int(i)
         raise ValueError(
             f"Could not find header row containing '{keyword}' within the first {search_limit} rows."
         )
@@ -157,14 +193,21 @@ class ApprovalsParser:
             # Clean up column names (remove newlines and spaces)
             df.columns = df.columns.str.strip().str.replace(r"\s+", "", regex=True)
 
-            # Drop rows that are entirely empty
-            df.dropna(how="all", inplace=True)
-
             # Forward-fill the values in the first three columns to handle merged cells
+            # This must be done BEFORE renaming, using the original column names.
             ffill_cols = df.columns[:3]
             df[ffill_cols] = df[ffill_cols].ffill()
 
-            logging.info("Successfully parsed Excel file into DataFrame.")
+            # Rename columns to match the schema
+            df = self._rename_columns(df)
+
+            # Drop rows that are entirely empty
+            df.dropna(how="all", inplace=True)
+
+            # Validate the schema
+            self._validate_schema(df)
+
+            logging.info("Successfully parsed and validated Excel file into DataFrame.")
             return [df]
         except Exception as e:
             logging.error(f"Error parsing Excel file {file_path}: {e}", exc_info=True)
