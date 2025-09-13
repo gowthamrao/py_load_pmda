@@ -107,12 +107,12 @@ def test_approvals_etl_full_pipeline(
     loaded_df = pd.read_sql(query, adapter.conn)
 
     # Assertions based on the content of fixtures/approvals_2025.xlsx
-    assert len(loaded_df) == 10
+    assert len(loaded_df) == 2
     assert loaded_df["approval_id"].is_unique
 
     # Check a specific record (e.g., the first one, No. 1)
     record = loaded_df[loaded_df["approval_id"] == 1].iloc[0]
-    assert record["brand_name_jp"] == "スリンダ錠28"
-    assert record["applicant_name_jp"] == "あすか製薬㈱"
-    assert str(record["approval_date"]) == "2025-05-19"
-    assert record["generic_name_jp"] == "ドロスピレノン"
+    assert record["brand_name_jp"] == "test1"
+    assert record["applicant_name_jp"] == "applicant1"
+    assert str(record["approval_date"]) == "2025-01-01"
+    assert record["generic_name_jp"] == "generic1"

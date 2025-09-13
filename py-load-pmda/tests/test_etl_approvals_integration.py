@@ -26,29 +26,32 @@ def mock_approvals_parser(monkeypatch):
     raw_data = [
         # Approval ID 1: Single row
         {
-            "分野": "第1",
-            "承認日": "令和7年1月1日",
-            "No.": 1.0,
-            "販売名(会社名、法人番号)": "Drug A (Corp A、123)",
-            "成分名(下線:新有効成分)": "Generic A",
-            "効能・効果等": "Indication A",
+            "application_type": "第1",
+            "approval_date": "令和7年1月1日",
+            "approval_id": 1.0,
+            "brand_name_jp": "Drug A",
+            "applicant_name_jp": "Corp A",
+            "generic_name_jp": "Generic A",
+            "indication": "Indication A",
         },
         # Approval ID 2: Two rows that need aggregation
         {
-            "分野": "第2",
-            "承認日": "令和7年2月2日",
-            "No.": 2.0,
-            "販売名(会社名、法人番号)": "Drug B (Corp B、456)",
-            "成分名(下線:新有効成分)": "Generic B1",
-            "効能・効果等": "Indication B1",
+            "application_type": "第2",
+            "approval_date": "令和7年2月2日",
+            "approval_id": 2.0,
+            "brand_name_jp": "Drug B",
+            "applicant_name_jp": "Corp B",
+            "generic_name_jp": "Generic B1",
+            "indication": "Indication B1",
         },
         {
-            "分野": "第2",
-            "承認日": "令和7年2月2日",
-            "No.": 2.0,
-            "販売名(会社名、法人番号)": "Drug B (Corp B、456)",
-            "成分名(下線:新有効成分)": "Generic B2",
-            "効能・効果等": "Indication B2",
+            "application_type": "第2",
+            "approval_date": "令和7年2月2日",
+            "approval_id": 2.0,
+            "brand_name_jp": "Drug B",
+            "applicant_name_jp": "Corp B",
+            "generic_name_jp": "Generic B2",
+            "indication": "Indication B2",
         },
     ]
     raw_df = pd.DataFrame(raw_data)
@@ -72,12 +75,13 @@ def mock_approvals_parser_with_invalid_data(monkeypatch):
     mock_parser = MagicMock(spec=ApprovalsParser)
     invalid_raw_data = [
         {
-            "分野": "第1",
-            "承認日": "令和7年1月1日",
-            "No.": None,  # This will cause the 'approval_id' to be null
-            "販売名(会社名、法人番号)": "Invalid Drug (Corp C、789)",
-            "成分名(下線:新有効成分)": "Generic C",
-            "効能・効果等": "Indication C",
+            "application_type": "第1",
+            "approval_date": "令和7年1月1日",
+            "approval_id": None,  # This will cause the 'approval_id' to be null
+            "brand_name_jp": "Invalid Drug",
+            "applicant_name_jp": "Corp C",
+            "generic_name_jp": "Generic C",
+            "indication": "Indication C",
         }
     ]
     invalid_df = pd.DataFrame(invalid_raw_data)
