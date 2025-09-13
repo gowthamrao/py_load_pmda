@@ -87,7 +87,7 @@ class BaseExtractor:
         """Fetches and parses the content of a given URL."""
         response = self._send_request(url)
         response.encoding = response.apparent_encoding
-        return BeautifulSoup(response.text, "html.parser")
+        return BeautifulSoup(response.text, "lxml")
 
     def extract(self, **kwargs: Any) -> Any:
         """
@@ -162,7 +162,13 @@ class ApprovalsExtractor(BaseExtractor):
 
     def _find_excel_download_url(self, soup: BeautifulSoup) -> str:
         """Finds the download link for the Excel file on the page."""
-        link = soup.find("a", href=lambda href: href and ".xlsx" in href)
+        # First, try to find a link with class 'excel'
+        link = soup.find("a", class_="excel", href=lambda href: href and ".xlsx" in href)
+
+        # If that fails, fall back to the original, more generic selector
+        if not link:
+            link = soup.find("a", href=lambda href: href and ".xlsx" in href)
+
         if not isinstance(link, Tag) or not link.has_attr("href"):
             raise ValueError("Could not find the Excel file download link.")
         return urljoin(self.base_url, str(link["href"]))

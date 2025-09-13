@@ -19,33 +19,6 @@ class ApprovalsTransformer:
     def __init__(self, source_url: str):
         self.source_url = source_url
 
-    def _extract_brand_and_applicant(self, series: pd.Series) -> pd.DataFrame:
-        """Extracts brand name and applicant from a combined string."""
-        # Regex to capture the brand name (non-greedy) and the applicant name inside the last parentheses.
-        # This now accepts either a Japanese or Western comma.
-        pattern = re.compile(r"^(.*?)\s*\(([^)]+[、,][^)]+)\)$", re.DOTALL)
-
-        extracted = series.str.extract(pattern)
-        extracted.columns = ["brand_name_jp", "applicant_name_jp_raw"]
-
-        # For rows that didn't match (i.e., no applicant in parentheses),
-        # the brand name is the whole string.
-        extracted["brand_name_jp"] = extracted["brand_name_jp"].fillna(series)
-
-        # Clean up the applicant name by removing the corporate number
-        if "applicant_name_jp_raw" in extracted.columns:
-            extracted["applicant_name_jp"] = (
-                extracted["applicant_name_jp_raw"].str.split("、").str[0]
-            )
-        else:
-            extracted["applicant_name_jp"] = None
-
-        # Clean up whitespace and newlines
-        extracted["brand_name_jp"] = extracted["brand_name_jp"].str.strip()
-        extracted["applicant_name_jp"] = extracted["applicant_name_jp"].str.strip()
-
-        return extracted[["brand_name_jp", "applicant_name_jp"]]
-
     def transform(self, dfs: List[pd.DataFrame]) -> pd.DataFrame:
         """
         Transforms the raw DataFrames to match the target schema. This involves
@@ -60,24 +33,11 @@ class ApprovalsTransformer:
         # The `to_json` call will be done during aggregation.
         df["original_row"] = df.to_dict(orient="records")
 
-        # 2. Rename columns
-        rename_map = {
-            "分野": "application_type",
-            "承認日": "approval_date_str",  # Keep as string for now
-            "No.": "approval_id",
-            "販売名(会社名、法人番号)": "brand_applicant_raw",
-            "成分名(下線:新有効成分)": "generic_name_jp",
-            "効能・効果等": "indication",
-        }
-        df.rename(columns=rename_map, inplace=True)
+        # The parser already renamed the columns. The transformer's job is to aggregate.
+        # Convert approval_date to a proper date object
+        df["approval_date"] = utils.to_iso_date(df["approval_date"])
 
-        # 3. Pre-process fields that need extraction before aggregation
-        brand_applicant_df = self._extract_brand_and_applicant(df["brand_applicant_raw"])
-        df["brand_name_jp"] = brand_applicant_df["brand_name_jp"]
-        df["applicant_name_jp"] = brand_applicant_df["applicant_name_jp"]
-        df["approval_date"] = utils.to_iso_date(df["approval_date_str"])
-
-        # 4. Define aggregation logic
+        # 2. Define aggregation logic
         # For text fields, join unique, non-null values. For others, take the first.
         agg_funcs = {
             "application_type": "first",

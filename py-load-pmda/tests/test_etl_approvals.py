@@ -55,16 +55,16 @@ def test_approvals_extractor(requests_mock: Mocker, tmp_path: Path) -> None:
 def sample_raw_df() -> pd.DataFrame:
     """Provides a sample raw DataFrame as output from the parser, now with Wareki dates."""
     data: Dict[str, List[Any]] = {
-        "分野": ["第５", "抗悪"],
-        "承認日": ["令和7年5月19日", "平成元年6月1日"],  # Wareki dates
-        "No.": [1.0, 5.0],
-        "販売名(会社名、法人番号)": [
-            "スリンダ錠28\n(あすか製薬㈱、9010401018375)",
-            "ブーレンレップ点滴静注用100 mg \n(グラクソ・スミスクライン㈱、2011001026329)",
+        "application_type": ["第５", "抗悪"],
+        "approval_date": ["令和7年5月19日", "平成元年6月1日"],  # Wareki dates
+        "approval_id": [1.0, 5.0],
+        "brand_name_jp": [
+            "スリンダ錠28",
+            "ブーレンレップ点滴静注用100 mg",
         ],
-        "承認": ["承　認", "承　認"],
-        "成分名(下線:新有効成分)": ["ドロスピレノン", "ベランタマブ マホドチン（遺伝子組換え）"],
-        "効能・効果等": [
+        "applicant_name_jp": ["あすか製薬㈱", "グラクソ・スミスクライン㈱"],
+        "generic_name_jp": ["ドロスピレノン", "ベランタマブ マホドチン（遺伝子組換え）"],
+        "indication": [
             "避妊を効能・効果とする新効能・新用量・その他の医薬品",
             "再発又は難治性の多発性骨髄腫を効能・効果とする新有効成分含有医薬品\n【希少疾病用医薬品】",
         ],
