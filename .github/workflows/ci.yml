@@ -21,9 +21,8 @@ jobs:
         cache: 'poetry'
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: '1.8.2'
+      run: |
+        pip install poetry==1.8.2
 
     - name: Install dependencies
       working-directory: ./py-load-pmda
