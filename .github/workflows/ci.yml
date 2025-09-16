@@ -58,7 +58,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
 
     - name: Start Docker Desktop
-      uses: crazy-max/ghaction-docker-desktop@v1
+      uses: crazy-max/docker-desktop-action@v1
       with:
         start: true
 
