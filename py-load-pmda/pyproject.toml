@@ -73,6 +73,7 @@ version = "0.1.0"
 description = "A Python package for ETL of regulatory data from the Japanese PMDA."
 authors = ["Gowtham Rao <rao@ohdsi.org>"]
 packages = [{include = "py_load_pmda", from = "src"}]
+python = ">=3.8, <4.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.0.0,<9.0.0"
