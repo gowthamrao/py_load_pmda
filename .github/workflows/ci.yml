@@ -28,7 +28,7 @@ jobs:
 
     - name: Check if lock file is up to date
       working-directory: ./py-load-pmda
-      run: poetry lock --check
+      run: poetry check --lock
 
     - name: Install dependencies
       working-directory: ./py-load-pmda
