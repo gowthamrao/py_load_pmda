@@ -26,6 +26,10 @@ jobs:
         virtualenvs-create: true
         virtualenvs-in-project: true
 
+    - name: Check if lock file is up to date
+      working-directory: ./py-load-pmda
+      run: poetry lock --check
+
     - name: Install dependencies
       working-directory: ./py-load-pmda
       run: poetry install --no-interaction
