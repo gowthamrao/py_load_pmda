@@ -10,7 +10,7 @@ authors = [
     {name = "Gowtham Rao", email = "rao@ohdsi.org"}
 ]
 readme = "README.md"
-requires-python = ">=3.12, <4.0"
+requires-python = ">=3.8, <4.0"
 keywords = ["pmda", "etl", "regulatory", "japan", "ohdsi"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -18,11 +18,15 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 dependencies = [
-    "pandas>=2.3.2,<3.0.0",
+    "pandas==1.5.3",
     "typer[all]>=0.17.4,<0.18.0",
     "PyYAML>=6.0,<7.0",
     "requests>=2.31.0,<3.0.0",
@@ -83,7 +87,7 @@ types-PyYAML = ">=6.0.12,<7.0.0"
 types-requests = ">=2.31.0,<3.0.0"
 types-beautifulsoup4 = ">=4.12.0,<5.0.0"
 moto = {version = ">=5.0.0,<6.0.0", extras = ["s3"]}
-testcontainers = {version = ">=4.13.0,<5.0.0", extras = ["postgres"]}
+testcontainers = {version = ">=4.13.0,<5.0.0", extras = ["postgres"], python = ">=3.9"}
 psycopg2-binary = ">=2.9.9,<3.0.0"
 slack_sdk = ">=3.20.0,<4.0.0"
 pytest-xdist = ">=3.5.0,<4.0.0"
@@ -99,7 +103,7 @@ line-length = 100
 select = ["E4", "E7", "E9", "F", "W", "I"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.8"
 warn_return_any = true
 warn_unused_configs = true
 strict = true
